@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Regression tests: timer callbacks may now create and cancel timers while
+  the scheduler dispatches the due timers (locks in the pump() safety fix).
+
+### Changed
+
+- CI no longer runs on tag pushes (the Release workflow covers tags) and
+  uses actions/checkout@v5.
+
 ## [1.1.0] — 2026-08-30
 
 ### Fixed

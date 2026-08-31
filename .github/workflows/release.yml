@@ -20,13 +20,11 @@ jobs:
         include:
           - preset: linux-gcc
             runs-on: ubuntu-latest
-            artifact_name: ml_base-linux-x64
           - preset: win-mingw
             runs-on: windows-latest
-            artifact_name: ml_base-win-x64
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
