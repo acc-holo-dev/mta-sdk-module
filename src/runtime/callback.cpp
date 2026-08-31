@@ -15,46 +15,65 @@ namespace
 {
 struct TrackedRef
 {
-    std::string resource;
     bool dead = false;
 };
 
-// Учёт живых ссылок. Только главный поток.
-std::unordered_map<int, TrackedRef> &tracked_refs()
+// Registry indices from luaL_ref are only unique within a single VM, and
+// every resource owns its own VM. Two resources can therefore legitimately
+// receive the SAME index, so references are keyed by resource name first:
+// equal indices in different VMs can never collide or leak into each other.
+using ResourceRefs = std::unordered_map<int, TrackedRef>;
+std::unordered_map<std::string, ResourceRefs> &tracked_refs()
 {
-    static std::unordered_map<int, TrackedRef> refs;
+    static std::unordered_map<std::string, ResourceRefs> refs;
     return refs;
 }
 
-bool ref_is_dead(int ref) noexcept
+bool ref_is_dead(const std::string &resource, int ref) noexcept
 {
     const auto &refs = tracked_refs();
-    const auto it = refs.find(ref);
-    return it == refs.end() || it->second.dead;
+    const auto resource_it = refs.find(resource);
+    if (resource_it == refs.end())
+    {
+        return true;
+    }
+    const auto ref_it = resource_it->second.find(ref);
+    return ref_it == resource_it->second.end() || ref_it->second.dead;
 }
 
-// Убирает ссылку из учёта; luaL_unref делает, пока VM ещё достижим.
-void untrack_ref(int ref) noexcept
+// Removes a reference from tracking; luaL_unref is called while the
+// resource's VM is still reachable.
+void untrack_ref(const std::string &resource, int ref) noexcept
 {
     auto &refs = tracked_refs();
-    const auto it = refs.find(ref);
-    if (it == refs.end())
+    const auto resource_it = refs.find(resource);
+    if (resource_it == refs.end())
     {
         return;
     }
 
-    if (!it->second.dead)
+    const auto ref_it = resource_it->second.find(ref);
+    if (ref_it == resource_it->second.end())
+    {
+        return;
+    }
+
+    if (!ref_it->second.dead)
     {
         if (auto *manager = mta::module::manager())
         {
-            if (lua_State *vm = manager->GetResourceFromName(it->second.resource.c_str()))
+            if (lua_State *vm = manager->GetResourceFromName(resource.c_str()))
             {
                 luaL_unref(vm, LUA_REGISTRYINDEX, ref);
             }
         }
     }
 
-    refs.erase(it);
+    resource_it->second.erase(ref_it);
+    if (resource_it->second.empty())
+    {
+        refs.erase(resource_it);
+    }
 }
 } // namespace
 
@@ -95,13 +114,13 @@ Callback Callback::from_stack(lua_State *lua_vm, int index)
     const std::string resource = mta::module::current_resource_name(lua_vm);
     if (resource.empty())
     {
-        mta::lua::raise_error("не удалось определить вызывающий ресурс для callback");
+        mta::lua::raise_error("could not determine the calling resource for the callback");
     }
 
     lua_pushvalue(lua_vm, index);
     const int ref = luaL_ref(lua_vm, LUA_REGISTRYINDEX);
 
-    tracked_refs()[ref] = TrackedRef{resource, false};
+    tracked_refs()[resource][ref] = TrackedRef{false};
 
     Callback callback;
     callback.resource_ = resource;
@@ -111,7 +130,7 @@ Callback Callback::from_stack(lua_State *lua_vm, int index)
 
 bool Callback::call(const mta::lua::Arguments &arguments) const
 {
-    if (!valid() || ref_is_dead(ref_))
+    if (!valid() || ref_is_dead(resource_, ref_))
     {
         return false;
     }
@@ -125,7 +144,7 @@ bool Callback::call(const mta::lua::Arguments &arguments) const
     lua_State *vm = manager->GetResourceFromName(resource_.c_str());
     if (vm == nullptr)
     {
-        return false; // ресурс остановлен (рестартнувший дал бы свежий VM)
+        return false; // resource stopped (a restarted one would return a fresh VM)
     }
 
     const int base = lua_gettop(vm);
@@ -136,11 +155,21 @@ bool Callback::call(const mta::lua::Arguments &arguments) const
         return false;
     }
 
+    // Every pushed argument consumes a stack slot; grow the stack explicitly
+    // instead of risking a hard stack overflow inside the call.
+    const int argument_count = static_cast<int>(arguments.count());
+    if (lua_checkstack(vm, argument_count + 4) == 0)
+    {
+        mta::log::error("callback stack overflow: could not grow the Lua stack");
+        lua_settop(vm, base);
+        return false;
+    }
+
     const int pushed = arguments.push(vm);
     if (lua_pcall(vm, pushed, 0, 0) != LUA_OK)
     {
         const char *message = lua_tostring(vm, -1);
-        mta::log::error("сбой callback модуля: ", message ? message : "неизвестная ошибка Lua");
+        mta::log::error("module callback failed: ", message ? message : "unknown Lua error");
         lua_settop(vm, base);
         return false;
     }
@@ -153,7 +182,7 @@ void Callback::release() noexcept
 {
     if (ref_ != LUA_NOREF)
     {
-        untrack_ref(ref_);
+        untrack_ref(resource_, ref_);
         ref_ = LUA_NOREF;
         resource_.clear();
     }
@@ -161,31 +190,38 @@ void Callback::release() noexcept
 
 void invalidate_resource_callbacks(const std::string &resource)
 {
-    for (auto &[ref, tracked] : tracked_refs())
+    auto &refs = tracked_refs();
+    const auto resource_it = refs.find(resource);
+    if (resource_it == refs.end())
     {
-        if (tracked.resource == resource)
-        {
-            tracked.dead = true; // VM умрёт сразу после — unref не нужен
-        }
+        return;
+    }
+    for (auto &[ref, tracked] : resource_it->second)
+    {
+        (void)ref;
+        tracked.dead = true; // the VM dies right after this — no unref needed
     }
 }
 
 void release_all_callbacks()
 {
     auto &refs = tracked_refs();
-    for (auto it = refs.begin(); it != refs.end();)
+    for (auto &[resource, resource_refs] : refs)
     {
-        if (!it->second.dead)
+        for (auto &[ref, tracked] : resource_refs)
         {
-            if (auto *manager = mta::module::manager())
+            if (!tracked.dead)
             {
-                if (lua_State *vm = manager->GetResourceFromName(it->second.resource.c_str()))
+                if (auto *manager = mta::module::manager())
                 {
-                    luaL_unref(vm, LUA_REGISTRYINDEX, it->first);
+                    if (lua_State *vm = manager->GetResourceFromName(resource.c_str()))
+                    {
+                        luaL_unref(vm, LUA_REGISTRYINDEX, ref);
+                    }
                 }
             }
         }
-        it = refs.erase(it);
     }
+    refs.clear();
 }
 } // namespace mta::async

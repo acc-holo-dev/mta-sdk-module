@@ -40,7 +40,7 @@ struct Timer
     std::string resource;
     clock_type::time_point next_fire{};
     int interval_ms = 1;
-    std::int64_t repeats_left = 0; // 0 = бесконечно
+    std::int64_t repeats_left = 0; // 0 = forever
     std::uint64_t fired = 0;
     std::function<void(std::uint64_t)> completion;
 };
@@ -55,8 +55,8 @@ struct Scheduler::Impl
     std::vector<std::thread> workers{};
     std::atomic<bool> stopping{false};
 
-    // Таймеры живут только в главном потоке (pump/handle_resource_stopped/
-    // post_timer), мьютекс не нужен.
+    // Timers live on the main thread only (pump/handle_resource_stopped/
+    // post_timer), so no mutex is needed for them.
     std::vector<Timer> timers{};
     std::uint64_t next_timer_id = 1;
 };
@@ -106,7 +106,7 @@ void Scheduler::worker_loop()
 
             if (impl_->stopping.load())
             {
-                return; // незавершённые задачи сбрасываются при остановке
+                return; // unfinished tasks are dropped on shutdown
             }
 
             task = std::move(impl_->tasks.front());
@@ -133,7 +133,7 @@ void Scheduler::worker_loop()
             std::lock_guard<std::mutex> lock(impl_->queue_mutex);
             if (impl_->stopping.load())
             {
-                return; // сервер выключается: ничего не доставляем
+                return; // server is shutting down: deliver nothing
             }
             impl_->completions.push_back(std::move(completion));
         }
@@ -167,7 +167,7 @@ void Scheduler::stop()
 
 void Scheduler::pump()
 {
-    // Раздаём готовые результаты фоновых задач.
+    // Deliver the results of finished background tasks.
     std::vector<Completion> ready;
     {
         std::lock_guard<std::mutex> lock(impl_->queue_mutex);
@@ -182,47 +182,61 @@ void Scheduler::pump()
         }
         catch (const std::exception &e)
         {
-            mta::log::error("сбой асинхронного completion: ", e.what());
+            mta::log::error("async completion failed: ", e.what());
         }
         catch (...)
         {
-            mta::log::error("сбой асинхронного completion: неизвестное исключение C++");
+            mta::log::error("async completion failed: unknown C++ exception");
         }
     }
 
-    // Срабатываем таймеры, у которых подошло время.
+    // Fire the timers whose time has come. Due timers are moved into a local
+    // snapshot BEFORE any callback runs: a callback may create or cancel
+    // timers (post_timer/cancel_timer), and mutating impl_->timers while
+    // iterating over it would invalidate iterators and references.
     const auto now = clock_type::now();
-    std::vector<Timer> keep;
-    keep.reserve(impl_->timers.size());
 
-    for (auto &timer : impl_->timers)
+    std::vector<Timer> due;
     {
-        if (timer.next_fire <= now)
+        auto &timers = impl_->timers;
+        for (auto it = timers.begin(); it != timers.end();)
         {
-            ++timer.fired;
-            try
+            if (it->next_fire <= now)
             {
-                timer.completion(timer.fired);
+                due.push_back(std::move(*it));
+                it = timers.erase(it);
             }
-            catch (const std::exception &e)
+            else
             {
-                mta::log::error("сбой таймера: ", e.what());
-            }
-            catch (...)
-            {
-                mta::log::error("сбой таймера: неизвестное исключение C++");
-            }
-
-            timer.next_fire = now + std::chrono::milliseconds(timer.interval_ms);
-            if (timer.repeats_left > 0 && --timer.repeats_left == 0)
-            {
-                continue; // лимит повторов исчерпан — убрать таймер
+                ++it;
             }
         }
-        keep.push_back(std::move(timer));
     }
 
-    impl_->timers.swap(keep);
+    for (auto &timer : due)
+    {
+        ++timer.fired;
+        try
+        {
+            timer.completion(timer.fired);
+        }
+        catch (const std::exception &e)
+        {
+            mta::log::error("timer callback failed: ", e.what());
+        }
+        catch (...)
+        {
+            mta::log::error("timer callback failed: unknown C++ exception");
+        }
+
+        if (timer.repeats_left > 0 && --timer.repeats_left == 0)
+        {
+            continue; // repeat limit reached — drop the timer
+        }
+
+        timer.next_fire = now + std::chrono::milliseconds(timer.interval_ms);
+        impl_->timers.push_back(std::move(timer));
+    }
 }
 
 void Scheduler::post_task(std::function<mta::lua::Arguments()> work,

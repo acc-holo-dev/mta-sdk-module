@@ -1,11 +1,11 @@
 #pragma once
 
-// Фоновые задачи с доставкой результатов в главный поток.
+// Background tasks with results delivered on the main thread.
 //
-// VM Lua НЕ потокобезопасен: любое касание lua_State должно происходить в
-// главном потоке сервера. Планировщик поэтому гоняет чистый C++ на воркерах
-// и доставляет результаты в главном потоке внутри DoPulse (см. pump()),
-// куда ядро модуля заходит каждый кадр сервера.
+// The Lua VM is NOT thread-safe: any lua_State access must happen on the
+// server's main thread. The scheduler therefore runs pure C++ on workers and
+// delivers results on the main thread inside DoPulse (see pump()), where the
+// module core enters on every server frame.
 //
 //     MTA_LUA_FUNCTION("fetch", "...")
 //     {
@@ -24,8 +24,8 @@
 //         return mta::lua::push_results(L, true);
 //     }
 //
-// Таймеры срабатывают тоже в главном потоке и автоматически отменяются
-// при остановке ресурса-владельца.
+// Timers also fire on the main thread and are cancelled automatically when
+// the owning resource stops.
 
 #include "lua/arguments.hpp"
 
@@ -41,28 +41,25 @@ class Scheduler
 public:
     static Scheduler &instance();
 
-    // Поднимает воркеры. Повторный вызов безопасен.
+    // Spawns the workers. Repeated calls are safe.
     void start();
-    // Останавливает воркеров и сбрасывает все очереди. Вызывается при
-    // завершении работы модуля.
+    // Stops the workers and clears every queue. Called on module shutdown.
     void stop();
-    // Главный поток: раздаёт готовые результаты и срабатывает таймеры.
-    // Никогда не бросает.
+    // Main thread: dispatches finished results and fires timers. Never throws.
     void pump();
 
-    // Выполняет work() на воркере; затем completion(results, error)
-    // вызывается в главном потоке во время pump(); error == nullptr при
-    // успехе.
+    // Runs work() on a worker; then completion(results, error) runs on the
+    // main thread during pump(); error == nullptr on success.
     void post_task(std::function<mta::lua::Arguments()> work,
                    std::function<void(const mta::lua::Arguments &, const char *)> completion);
 
-    // Вызывает completion(tick) каждые delay_ms, repeat_count раз
-    // (0 = пока не отменят или не остановится ресурс). Возвращает id > 0.
+    // Calls completion(tick) every delay_ms, repeat_count times
+    // (0 = until cancelled or the resource stops). Returns an id > 0.
     [[nodiscard]] std::uint64_t post_timer(std::string resource, int delay_ms, int repeat_count,
                                             std::function<void(std::uint64_t)> completion);
     bool cancel_timer(std::uint64_t timer_id);
 
-    // Отменяет таймеры ресурса, который только что остановился.
+    // Cancels the timers of a resource that just stopped.
     void handle_resource_stopped(const std::string &resource);
 
     [[nodiscard]] bool running() const noexcept;

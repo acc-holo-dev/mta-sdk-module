@@ -1,5 +1,5 @@
-// Список результатов: для переменного количества используем Arguments.
-// Целочисленные параметры проверяются на диапазон автоматически.
+// Result list: use Arguments when the number of results is dynamic.
+// Integer parameters are range-checked automatically.
 
 #include <cstdint>
 
@@ -7,13 +7,15 @@
 #include "lua/protect.hpp"
 #include "registry/registry.hpp"
 
-MTA_LUA_FUNCTION("sample_range", "Возвращает числа от from до to (несколько результатов).")
+MTA_LUA_FUNCTION("sample_range", "Returns the numbers from 'from' to 'to' (several results).")
 {
     auto [from, to] = mta::lua::args<std::int64_t, std::int64_t>(L);
 
-    if (to - from > 1000)
+    // Reject oversized ranges. The comparison uses unsigned arithmetic so
+    // extreme values (e.g. INT64_MIN..INT64_MAX) cannot overflow.
+    if (to >= from && static_cast<std::uint64_t>(to) - static_cast<std::uint64_t>(from) > 1000)
     {
-        mta::lua::raise_error("диапазон слишком большой: максимум 1000 чисел");
+        mta::lua::raise_error("range too large: at most 1000 numbers");
     }
 
     mta::lua::Arguments result;
