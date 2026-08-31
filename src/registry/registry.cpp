@@ -25,13 +25,13 @@ void Registry::register_all(ILuaModuleManager10 &manager, lua_State *lua_vm) con
 
     for (const auto &spec : functions_)
     {
-        // module_function и lua_CFunction имеют одинаковое ABI на всех
-        // поддерживаемых тулчейнах; каст переключает только языковую линковку.
+        // module_function and lua_CFunction share the same ABI on every
+        // supported toolchain; the cast only switches the language linkage.
         const bool registered =
             manager.RegisterFunction(lua_vm, spec.name, reinterpret_cast<lua_CFunction>(spec.function));
         if (!registered)
         {
-            mta::log::error("модуль: не удалось зарегистрировать функцию '", spec.name, "'");
+            mta::log::error("module: failed to register function '", spec.name, "'");
         }
     }
 }
@@ -39,8 +39,8 @@ void Registry::register_all(ILuaModuleManager10 &manager, lua_State *lua_vm) con
 
 namespace mta::lua::detail
 {
-// Мост из биндера в реестр; реализация здесь, чтобы bind.hpp не тянул
-// внутренности реестра.
+// Bridge from the binder into the registry; implemented here so bind.hpp
+// does not drag the registry internals along.
 bool register_function(const char *name, const char *description, int (*entry)(lua_State *))
 {
     if (name == nullptr || entry == nullptr)

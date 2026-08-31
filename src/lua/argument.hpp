@@ -1,8 +1,8 @@
 #pragma once
 
-// Снимок одного значения Lua: nil / boolean / number / string /
-// lightuserdata и таблицы (рекурсивно, до max_table_depth уровней —
-// защита от циклических ссылок).
+// Snapshot of a single Lua value: nil / boolean / number / string /
+// lightuserdata and tables (recursively, up to max_table_depth levels —
+// protection against cyclic references).
 
 #include "lua/common.hpp"
 
@@ -14,13 +14,12 @@
 
 namespace mta::lua
 {
-// Лимит глубины рекурсии при чтении/записи таблиц: всё, что глубже,
-// отбрасывается при чтении и заменяется на nil при записи.
+// Table recursion limit for reading/writing: anything deeper is dropped
+// when reading and replaced with nil when writing.
 inline constexpr int max_table_depth = 32;
 
-// Снимок таблицы: целочисленная последовательная часть (1..n) и поля со
-// строковыми ключами. Ключи других типов (boolean, таблицы и т.п.) при
-// чтении отбрасываются.
+// Table snapshot: the integer sequence part (1..n) and string-keyed fields.
+// Keys of other types (boolean, tables, ...) are discarded when reading.
 struct Table
 {
     std::vector<struct Argument> array;
@@ -61,9 +60,9 @@ public:
     [[nodiscard]] const Table &as_table() const;
     [[nodiscard]] Table &as_table();
 
-    // Читает значение по индексу (положительный или относительный).
+    // Reads the value at the index (positive or relative).
     void read(lua_State *lua_vm, int index, int depth = 0);
-    // Кладёт значение на верх стека.
+    // Pushes the value onto the top of the stack.
     void push(lua_State *lua_vm, int depth = 0) const;
 
     friend bool operator==(const Argument &lhs, const Argument &rhs) noexcept;

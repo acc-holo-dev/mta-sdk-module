@@ -1,6 +1,6 @@
-// Таймеры: callback(tick) срабатывает в главном потоке каждые delay_ms,
-// repeat_count раз (0 = пока не отменят). Таймер привязан к ресурсу
-// callback-а и отменяется автоматически при остановке ресурса.
+// Timers: callback(tick) fires on the main thread every delay_ms,
+// repeat_count times (0 = until cancelled). The timer is tied to the
+// callback's resource and is cancelled automatically when that resource stops.
 
 #include <cstdint>
 #include <memory>
@@ -12,7 +12,7 @@
 #include "runtime/scheduler.hpp"
 
 MTA_LUA_FUNCTION("sample_timer",
-    "Вызывает callback(tick) каждые delay_ms, repeat_count раз (0 = бесконечно). Возвращает id таймера.")
+    "Calls callback(tick) every delay_ms, repeat_count times (0 = forever). Returns the timer id.")
 {
     auto [delay, repeats, callback] =
         mta::lua::args<std::int64_t, std::int64_t, mta::async::Callback>(L);
@@ -31,7 +31,7 @@ MTA_LUA_FUNCTION("sample_timer",
 }
 
 MTA_LUA_FUNCTION("sample_timer_cancel",
-    "Отменяет таймер, созданный sample_timer. true, если таймер был отменён.")
+    "Cancels a timer created by sample_timer. true if a timer was cancelled.")
 {
     auto [timer_id] = mta::lua::args<std::int64_t>(L);
     return mta::lua::push_results(

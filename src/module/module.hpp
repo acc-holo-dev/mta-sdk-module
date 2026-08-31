@@ -1,7 +1,7 @@
 #pragma once
 
-// Жизненный цикл модуля. Точки входа MTAEXPORT из module.cpp перенаправляют
-// сюда; эти же хуки используют внутренние подсистемы.
+// Module lifecycle. The MTAEXPORT entry points in module.cpp forward here;
+// the same hooks are used by internal subsystems.
 
 #include <string>
 
@@ -20,9 +20,9 @@ struct Info
 Info info() noexcept;
 ILuaModuleManager10 *manager() noexcept;
 
-// Имя ресурса, которому принадлежит lua_vm; пустая строка, если не удалось
-// определить. Использует ABI-безопасный char*-вариант менеджера (перегрузка
-// со std::string пересекает границу DLL с чувствительной к ABI строкой).
+// The name of the resource owning lua_vm; an empty string when it cannot be
+// determined. Uses the ABI-safe char* manager overload (the std::string
+// overload crosses the DLL boundary with an ABI-sensitive type).
 std::string current_resource_name(lua_State *lua_vm) noexcept;
 
 bool initialize(ILuaModuleManager10 *manager, char *module_name, char *author, float *version) noexcept;

@@ -1,7 +1,7 @@
 #pragma once
 
-// Экспорт точек входа MTA. Сервер резолвит эти имена через
-// LoadLibrary/dlsym при загрузке модуля.
+// MTA entry-point exports. The server resolves these names via
+// LoadLibrary/dlsym when loading the module.
 
 #ifndef MTAEXPORT
 #if defined(_WIN32)

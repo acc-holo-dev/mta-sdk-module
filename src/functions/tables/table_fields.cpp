@@ -1,7 +1,7 @@
-// Хелперы таблиц: чтение/запись полей по строковому ключу.
+// Table helpers: read/write fields by string key.
 //
-//     local t = {name = "Вася", hp = 100}
-//     local name, hp = sample_table_get(t)   -- "Вася", 100
+//     local t = {name = "Alice", hp = 100}
+//     local name, hp = sample_table_get(t)   -- "Alice", 100
 
 #include <string>
 
@@ -9,7 +9,7 @@
 #include "registry/registry.hpp"
 
 MTA_LUA_FUNCTION("sample_table_get",
-    "Читает поля name (строка) и hp (число) из таблицы; возвращает оба.")
+    "Reads the 'name' (string) and 'hp' (number) fields of a table; returns both.")
 {
     auto [table] = mta::lua::args<mta::lua::Table>(L);
 
@@ -20,7 +20,7 @@ MTA_LUA_FUNCTION("sample_table_get",
 }
 
 MTA_LUA_FUNCTION("sample_table_set",
-    "Записывает поле name в таблицу и возвращает её обратно.")
+    "Writes the 'name' field into a table and returns the table back.")
 {
     auto [table, name] = mta::lua::args<mta::lua::Table, std::string>(L);
 

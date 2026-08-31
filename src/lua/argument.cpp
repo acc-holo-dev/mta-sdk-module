@@ -1,3 +1,5 @@
+// Argument snapshot implementation: reading values off the stack (including
+// recursive table traversal) and pushing them back.
 #include "lua/argument.hpp"
 
 #include "lua/stack.hpp"
@@ -10,7 +12,7 @@ namespace mta::lua
 {
 namespace
 {
-// Приводит индекс (в том числе отрицательный) к абсолютному.
+// Converts an index (including negative/relative ones) to an absolute one.
 int normalize_index(lua_State *lua_vm, int index)
 {
     if (index >= 0)
@@ -22,7 +24,7 @@ int normalize_index(lua_State *lua_vm, int index)
     return top + index + 1;
 }
 
-// Кладёт значение на последовательную позицию (1-based); дыры заполняются nil.
+// Stores a value at a 1-based sequence position; gaps are filled with nil.
 void store_sequence_value(Table &table, lua_Integer position, Argument value)
 {
     const std::size_t index = static_cast<std::size_t>(position - 1);
@@ -126,7 +128,7 @@ const Table &Argument::as_table() const
 {
     if (type_ != Type::Table)
     {
-        throw std::logic_error("Argument не содержит таблицу");
+        throw std::logic_error("Argument does not contain a table");
     }
     return std::get<Table>(value_);
 }
@@ -135,7 +137,7 @@ Table &Argument::as_table()
 {
     if (type_ != Type::Table)
     {
-        throw std::logic_error("Argument не содержит таблицу");
+        throw std::logic_error("Argument does not contain a table");
     }
     return std::get<Table>(value_);
 }
@@ -179,15 +181,15 @@ void Argument::read(lua_State *lua_vm, int index, int depth)
 
         if (depth < max_table_depth)
         {
-            // Итерируемся по копии таблицы, поднятой на верх стека:
-            // исходный индекс остаётся валидным при любых манипуляциях выше.
+            // Iterate over a copy of the table pushed to the top of the
+            // stack: the original index stays valid under any stack changes.
             lua_pushvalue(lua_vm, normalized_index);
             const int copy_index = lua_gettop(lua_vm);
             lua_pushnil(lua_vm);
 
             while (lua_next(lua_vm, copy_index) != 0)
             {
-                // Ключ лежит в -2, значение — в -1.
+                // Key sits at -2, value at -1.
                 Argument key;
                 key.read(lua_vm, -2, depth + 1);
 
@@ -209,10 +211,10 @@ void Argument::read(lua_State *lua_vm, int index, int depth)
                     table.fields.emplace_back(key.as_string(), std::move(value));
                 }
 
-                lua_pop(lua_vm, 1); // снять значение, ключ оставить для lua_next
+                lua_pop(lua_vm, 1); // pop the value, keep the key for lua_next
             }
 
-            lua_pop(lua_vm, 1); // снять копию таблицы
+            lua_pop(lua_vm, 1); // pop the table copy
         }
         break;
     }
@@ -251,7 +253,7 @@ void Argument::push(lua_State *lua_vm, int depth) const
     {
         if (depth >= max_table_depth)
         {
-            // Лимит рекурсии: вместо зацикливания кладём nil.
+            // Recursion limit: push nil instead of looping forever.
             lua_pushnil(lua_vm);
             break;
         }
@@ -264,7 +266,7 @@ void Argument::push(lua_State *lua_vm, int depth) const
         {
             if (table.array[i].type() == Type::None)
             {
-                lua_pushnil(lua_vm); // дыры не смещают позиции последовательности
+                lua_pushnil(lua_vm); // holes must not shift sequence positions
             }
             else
             {

@@ -1,13 +1,13 @@
-// Необязательный аргумент через std::optional: nil или отсутствие дают
-// nullopt, дефолт достаётся value_or.
+// Optional argument via std::optional: nil or absence yields nullopt,
+// the default is pulled out with value_or.
 
 #include <optional>
 #include <string>
 
 #include "registry/registry.hpp"
 
-MTA_LUA_FUNCTION("sample_greet", "Приветствие; greeting можно не передавать (nil).")
+MTA_LUA_FUNCTION("sample_greet", "Greets a name; greeting is optional (nil).")
 {
     auto [name, greeting] = mta::lua::args<std::string, std::optional<std::string>>(L);
-    return mta::lua::push_results(L, greeting.value_or("привет") + ", " + name);
+    return mta::lua::push_results(L, greeting.value_or("hello") + ", " + name);
 }

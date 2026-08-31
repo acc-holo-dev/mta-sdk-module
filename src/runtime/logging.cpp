@@ -11,7 +11,8 @@ namespace
 {
 Level g_level = Level::Info;
 
-// Вывод, пока менеджер модуля не подключён (тест-харнесс, ранние ошибки).
+// Output while the module manager is not attached (test harness, early
+// errors).
 void fallback_write(std::FILE *target, std::string_view message)
 {
     std::fwrite(message.data(), 1, message.size(), target);

@@ -1,5 +1,5 @@
-// Пер-ресурсное состояние: счётчик обращений ресурса. Сбрасывается
-// автоматически при остановке ресурса (ResourceStopped).
+// Per-resource state: a hit counter for the calling resource. It resets
+// automatically when the resource stops (ResourceStopped).
 
 #include "registry/registry.hpp"
 #include "runtime/resources.hpp"
@@ -15,7 +15,7 @@ mta::resources::Store<Session> g_sessions;
 } // namespace
 
 MTA_LUA_FUNCTION("sample_session_hit",
-    "Счётчик обращений ресурса; сбрасывается при остановке ресурса.")
+    "Hit counter for the calling resource; resets when the resource stops.")
 {
     Session &session = g_sessions.for_state(L);
     ++session.hits;

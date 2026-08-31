@@ -1,10 +1,10 @@
-// Вариадика: читаем все аргументы списком и возвращаем обратно (включая
-// таблицы) как список результатов.
+// Variadic: read every argument as a list and return them unchanged
+// (including tables) as a list of results.
 
 #include "lua/arguments.hpp"
 #include "registry/registry.hpp"
 
-MTA_LUA_FUNCTION("sample_echo", "Возвращает все аргументы без изменений (включая таблицы).")
+MTA_LUA_FUNCTION("sample_echo", "Returns all arguments unchanged (including tables).")
 {
     mta::lua::Arguments arguments;
     arguments.read(L);

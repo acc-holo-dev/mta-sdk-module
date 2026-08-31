@@ -1,18 +1,18 @@
 #pragma once
 
-// Логирование через менеджер модуля: вывод уходит в консоль MTA-сервера.
-// Пока менеджер не подключён (например, в тестовом харнессе) — fallback
-// в стандартный вывод/ошибку.
+// Logging through the module manager: output goes to the MTA server console.
+// While the manager is not attached (e.g. in the test harness) it falls back
+// to standard output/error.
 //
-// Уровни (по возрастанию серьёзности): Debug < Info < Warn < Error < Off.
-// Сообщение печатается, если его уровень >= текущего (set_level).
-// По умолчанию уровень Info: debug скрыт, info/warn/error видны.
+// Levels (in ascending severity): Debug < Info < Warn < Error < Off.
+// A message is printed when its level >= the current one (set_level).
+// The default level is Info: debug is hidden, info/warn/error are visible.
 //
 //     mta::log::set_level(mta::log::Level::Debug);
-//     mta::log::info("подключено ", host, ":", port);
-//     mta::log::warn("подозрительное значение: ", value);
-//     mta::log::error("запрос не удался: ", reason);
-//     mta::log::debug(L, "вызов из контекста ресурса");
+//     mta::log::info("connected to ", host, ":", port);
+//     mta::log::warn("suspicious value: ", value);
+//     mta::log::error("request failed: ", reason);
+//     mta::log::debug(L, "called in resource context");
 
 #include <sstream>
 #include <string>

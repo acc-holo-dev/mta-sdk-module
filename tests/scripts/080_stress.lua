@@ -1,4 +1,4 @@
--- Стресс-тест планировщика: 1000 асинхронных задач одновременно.
+-- Scheduler stress test: 1000 async tasks at once.
 
 local count = 0
 for i = 1, 1000 do

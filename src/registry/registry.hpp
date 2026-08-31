@@ -1,22 +1,23 @@
 #pragma once
 
-// Реестр Lua-функций и макросы регистрации.
+// Lua-function registry and registration macros.
 //
-// Основной способ — тело-стиль с типизированными аргументами:
+// The main style is body-style with typed arguments:
 //
-//     MTA_LUA_FUNCTION("my_sum", "Складывает два числа.")
+//     MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 //     {
 //         auto [a, b] = mta::lua::args<double, double>(L);
 //         return mta::lua::push_results(L, a + b);
 //     }
 //
-// Короткие однострочники — лямбда-стиль (типы из сигнатуры, возврат авто):
+// Short one-liners use the lambda style (types from the signature, automatic
+// return):
 //
-//     MTA_LUA_FUNC("my_sum", "Складывает два числа.",
+//     MTA_LUA_FUNC("my_sum", "Adds two numbers.",
 //         [](double a, double b) { return a + b; });
 //
-// Оба макроса можно писать в любом .cpp под src/ — сборка подхватит файл,
-// а регистрация произойдёт автоматически при загрузке модуля.
+// Both macros work in any .cpp under src/ — the build picks up the file and
+// registration happens automatically when the module loads.
 
 #include "lua/bind.hpp"
 
@@ -27,7 +28,7 @@ struct ILuaModuleManager10;
 
 namespace mta::registry
 {
-// Сырая точка входа (C++-linkage); каркас оборачивает её в Lua-функцию.
+// Raw entry point (C++ linkage); the framework wraps it into a Lua function.
 using module_function = int (*)(lua_State *lua_vm);
 
 struct Spec
@@ -44,7 +45,7 @@ public:
 
     void add(Spec spec);
 
-    // Регистрирует все функции в VM ресурса (при старте каждого ресурса).
+    // Registers every function into the resource's VM (at each resource start).
     void register_all(ILuaModuleManager10 &manager, lua_State *lua_vm) const;
 
     [[nodiscard]] const std::vector<Spec> &functions() const noexcept { return functions_; }
@@ -59,28 +60,16 @@ private:
 #define MTA_CAT_(a, b) a##b
 #define MTA_CAT(a, b) MTA_CAT_(a, b)
 
-// --- лямбда-стиль (короткий) -------------------------------------------------
+// --- lambda style (short) -----------------------------------------------------
 
-#define MTA_LUA_FUNC_IMPL(Name, Description, Function, Counter) \
-    [[maybe_unused]] static const bool MTA_CAT(mta_func_registered_, Counter) = \
-        ::mta::lua::detail::register_typed<Counter>((Name), (Description), (Function))
+#define MTA_LUA_FUNC_IMPL(Name, Description, Function, Counter)     [[maybe_unused]] static const bool MTA_CAT(mta_func_registered_, Counter) =         ::mta::lua::detail::register_typed<Counter>((Name), (Description), (Function))
 
-// MTA_LUA_FUNC("имя", "описание", функция-лямбда);
-#define MTA_LUA_FUNC(Name, Description, Function) \
-    MTA_LUA_FUNC_IMPL((Name), (Description), (Function), __COUNTER__)
+// MTA_LUA_FUNC("name", "description", lambda-function);
+#define MTA_LUA_FUNC(Name, Description, Function)     MTA_LUA_FUNC_IMPL((Name), (Description), (Function), __COUNTER__)
 
-// --- тело-стиль (основной) ----------------------------------------------------
+// --- body style (main) ---------------------------------------------------------
 
-#define MTA_LUA_FUNCTION_IMPL(Name, Description, Counter) \
-    static int MTA_CAT(mta_body_, Counter)(lua_State * L); \
-    [[maybe_unused]] static const bool MTA_CAT(mta_registered_, Counter) = \
-        ::mta::lua::detail::register_function( \
-            (Name), (Description), \
-            +[](lua_State * L) -> int { \
-                return ::mta::lua::protected_call(L, &MTA_CAT(mta_body_, Counter)); \
-            }); \
-    static int MTA_CAT(mta_body_, Counter)(lua_State * L)
+#define MTA_LUA_FUNCTION_IMPL(Name, Description, Counter)     static int MTA_CAT(mta_body_, Counter)(lua_State * L);     [[maybe_unused]] static const bool MTA_CAT(mta_registered_, Counter) =         ::mta::lua::detail::register_function(             (Name), (Description),             +[](lua_State * L) -> int {                 return ::mta::lua::protected_call(L, &MTA_CAT(mta_body_, Counter));             });     static int MTA_CAT(mta_body_, Counter)(lua_State * L)
 
-// MTA_LUA_FUNCTION("имя", "описание") { тело; аргументы через args<...> }
-#define MTA_LUA_FUNCTION(Name, Description) \
-    MTA_LUA_FUNCTION_IMPL((Name), (Description), __COUNTER__)
+// MTA_LUA_FUNCTION("name", "description") { body; arguments via args<...> }
+#define MTA_LUA_FUNCTION(Name, Description)     MTA_LUA_FUNCTION_IMPL((Name), (Description), __COUNTER__)

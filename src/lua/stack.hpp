@@ -1,13 +1,12 @@
 #pragma once
 
-// Удобный типобезопасный доступ к стеку Lua для тел функций модуля.
+// Convenient, type-safe access to the Lua stack for module function bodies.
 //
-// Все check_* / opt_* бросают исключения (см. protect.hpp), а не зовут
-// luaL_error напрямую — локальные C++-объекты корректно разрушаются при
-// плохих аргументах. push-хелперы безопасно расширяют стек через
-// lua_checkstack.
+// All check_*/opt_* helpers throw exceptions (see protect.hpp) instead of
+// calling luaL_error directly, so local C++ objects are destroyed properly on
+// bad arguments. The push helpers grow the stack safely via lua_checkstack.
 //
-// Использование внутри MTA_LUA_FUNCTION:
+// Inside MTA_LUA_FUNCTION:
 //     const double a = mta::lua::check_number(L, 1);
 //     return mta::lua::push_results(L, a + b);
 
@@ -53,7 +52,7 @@ namespace detail
     return lua_gettop(L);
 }
 
-// --- Чтение типизированных аргументов (бросают при несоответствии) --------
+// --- Typed argument readers (throw on mismatch) ------------------------------
 
 [[nodiscard]] inline double check_number(lua_State *L, int index)
 {
@@ -146,7 +145,7 @@ namespace detail
     return lua_toboolean(L, normalized) != 0;
 }
 
-// Принимает строки (числа конвертируются, как в стандартном luaL_checkstring).
+// Accepts strings (numbers are converted, like the standard luaL_checkstring).
 [[nodiscard]] inline std::string check_string(lua_State *L, int index)
 {
     const int normalized = detail::normalize_index(L, index);
@@ -189,7 +188,7 @@ namespace detail
     return lua_touserdata(L, normalized);
 }
 
-// --- Выкладка результатов ---------------------------------------------------
+// --- Result pushing ----------------------------------------------------------
 
 inline void push_one(lua_State *L, lua_Number value) noexcept
 {
@@ -236,8 +235,8 @@ inline void push_one(lua_State *L, void *value) noexcept
     lua_pushlightuserdata(L, value);
 }
 
-// Объявлены ниже (argument.hpp/arguments.hpp): позволяет передавать
-// аргументы и таблицы прямо в push_results.
+// Declared below (argument.hpp/arguments.hpp): allows passing arguments and
+// tables straight into push_results.
 class Argument;
 class Arguments;
 struct Table;
@@ -245,8 +244,8 @@ void push_one(lua_State *L, const Argument &value);
 void push_one(lua_State *L, const Arguments &value);
 void push_one(lua_State *L, const Table &value);
 
-// Кладёт одно или несколько значений и возвращает их количество.
-// Расширяет стек безопасно; бросает исключение, если стек не растянется.
+// Pushes one or more values and returns how many were pushed.
+// Grows the stack safely; throws if the stack cannot grow.
 template <typename... Values>
 int push_results(lua_State *L, Values &&...values)
 {
@@ -258,7 +257,7 @@ int push_results(lua_State *L, Values &&...values)
     {
         if (lua_checkstack(L, static_cast<int>(sizeof...(values)) + 8) == 0)
         {
-            raise_error("переполнение стека Lua: не удалось положить ", sizeof...(values), " значений");
+            raise_error("Lua stack overflow: could not push ", sizeof...(values), " values");
         }
         (push_one(L, std::forward<Values>(values)), ...);
         return static_cast<int>(sizeof...(values));

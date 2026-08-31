@@ -1,20 +1,21 @@
 #pragma once
 
-// Триггер MTA-событий из модуля.
+// Triggering MTA events from the module.
 //
-// Модуль может «бросить» событие в Lua-скрипты ресурса через штатный
-// глобальный triggerEvent. Скрипт ловит его обычным addEventHandler:
+// The module can "throw" an event into a resource's Lua scripts through the
+// standard global triggerEvent. The script catches it with the usual
+// addEventHandler:
 //
 //     -- Lua:
 //     addEventHandler("onMyModuleReady", root, function(...) ... end)
 //
-//     // C++ (внутри функции модуля):
+//     // C++ (inside a module function):
 //     mta::lua::Arguments args;
 //     args.push_string("hello");
 //     mta::events::trigger(L, "onMyModuleReady", args);
 //
-// Источник события — глобальный корневой элемент root. Вызывать только из
-// главного потока (как и всё, что касается lua_State).
+// The event source is the global root element. Call from the main thread
+// only (like everything touching lua_State).
 
 #include "lua/arguments.hpp"
 
@@ -22,7 +23,7 @@ struct lua_State;
 
 namespace mta::events
 {
-// Триггерит событие в VM ресурса. false, если triggerEvent недоступен или
-// вызов не удался (логируется).
+// Triggers an event in the resource's VM. Returns false if triggerEvent is
+// unavailable or the call failed (logged).
 bool trigger(lua_State *lua_vm, const char *event_name, const mta::lua::Arguments &arguments);
 } // namespace mta::events

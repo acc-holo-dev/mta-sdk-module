@@ -1,10 +1,10 @@
 #pragma once
 
-// Пер-ресурсное состояние с автоматической очисткой.
+// Per-resource state with automatic cleanup.
 //
-// Каждый ресурс MTA живёт в своём VM, и этот VM умирает при остановке
-// ресурса. Всё, что модуль хранит на ресурс, обязано сбрасываться в
-// ResourceStopped. Store делает это сам:
+// Every MTA resource lives in its own VM, and that VM dies when the resource
+// stops. Everything the module stores per resource must be reset in
+// ResourceStopped. Store does this for you:
 //
 //     namespace
 //     {
@@ -17,8 +17,8 @@
 //         ...
 //     }
 //
-// Использовать только из функций модуля (главный поток, живой VM): хранилище
-// определяет вызывающий ресурс через менеджер модуля.
+// Use only from module functions (main thread, live VM): the store
+// determines the calling resource through the module manager.
 
 #include "lua/protect.hpp"
 #include "module/module.hpp"
@@ -30,8 +30,8 @@
 
 namespace mta::resources
 {
-// Получатель уведомлений жизненного цикла; ядро модуля зовёт хаб из
-// ResourceStopping/ResourceStopped/ShutdownModule в главном потоке.
+// Lifecycle-notification recipient; the module core calls the hub from
+// ResourceStopping/ResourceStopped/ShutdownModule on the main thread.
 class Sink
 {
 public:
@@ -61,11 +61,11 @@ private:
     std::vector<Sink *> sinks_{};
 };
 
-// Данные на ресурс типа T. T должен быть default-constructible.
+// Per-resource data of type T. T must be default-constructible.
 template <typename T>
 class Store final : public Sink
 {
-    static_assert(std::is_default_constructible_v<T>, "тип состояния ресурса должен иметь конструктор по умолчанию");
+    static_assert(std::is_default_constructible_v<T>, "per-resource state type must be default-constructible");
 
 public:
     Store()
@@ -81,13 +81,13 @@ public:
     Store(const Store &) = delete;
     Store &operator=(const Store &) = delete;
 
-    // Данные ресурса, который сейчас вызывает. Создаётся при первом обращении.
+    // Data of the resource that is calling now. Created on first access.
     T &for_state(lua_State *lua_vm)
     {
         const std::string resource = mta::module::current_resource_name(lua_vm);
         if (resource.empty())
         {
-            mta::lua::raise_error("не удалось определить вызывающий ресурс");
+            mta::lua::raise_error("could not determine the calling resource");
         }
         return data_[resource];
     }

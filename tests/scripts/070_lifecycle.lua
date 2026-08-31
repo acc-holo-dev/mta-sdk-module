@@ -1,14 +1,14 @@
--- Жизненный цикл: пер-ресурсное состояние сбрасывается при остановке ресурса.
+-- Lifecycle: per-resource state resets when the resource stops.
 
 test_assert(sample_session_hit() == 1, "first hit")
 test_assert(sample_session_hit() == 2, "second hit")
 
--- имитируем остановку ресурса (ResourceStopping + ResourceStopped)
+-- simulate a resource stop (ResourceStopping + ResourceStopped)
 test_resource_stop()
 
--- состояние сброшено: счётчик снова с единицы
+-- state was reset: the counter starts from one again
 test_assert(sample_session_hit() == 1, "state reset after resource stop")
 
--- имитируем рестарт ресурса (повторная регистрация функций)
+-- simulate a resource restart (functions re-registered)
 test_resource_start()
 test_assert(sample_session_hit() == 2, "state persists after restart")

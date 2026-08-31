@@ -1,13 +1,13 @@
-// Embedded-тест-харнесс.
+// Embedded test harness.
 //
-// Загружает ядро модуля в чистый интерпретатор Lua 5.1 вместе с mock-версией
-// ILuaModuleManager10 и прогоняет все tests/scripts/*.lua. Модульные функции
-// проверяются без запуска MTA-сервера: типы аргументов, перевод ошибок,
-// таблицы, доставка асинхронных результатов, таймеры.
+// Loads the module core into a clean Lua 5.1 interpreter together with a
+// mock ILuaModuleManager10 and runs every tests/scripts/*.lua. Module
+// functions are verified without launching an MTA server: argument types,
+// error translation, tables, async result delivery, timers.
 //
-// Хелперы со стороны Lua:
-//   test_assert(условие, сообщение)  — фиксирует успех/провал
-//   test_pump(миллисекунды)         — качает DoPulse указанное время
+// Lua-side helpers:
+//   test_assert(condition, message)  — records a pass/fail
+//   test_pump(milliseconds)          — pumps DoPulse for the given time
 
 #include "ILuaModuleManager10.h"
 
@@ -32,8 +32,8 @@ int g_passed = 0;
 int g_failed = 0;
 int g_script_errors = 0;
 
-// Mock менеджера: регистрирует функции в тестовый VM, отдаёт фиктивные
-// сведения о сервере и «знает» единственный ресурс test_resource.
+// Manager mock: registers functions into the test VM, reports fake server
+// facts and "knows" a single resource named test_resource.
 class MockModuleManager final : public ILuaModuleManager10
 {
 public:
@@ -154,13 +154,13 @@ int test_assert(lua_State *lua_vm)
     }
 
     const char *message = lua_tostring(lua_vm, 2);
-    std::printf("  ASSERT FAILED (строка %d): %s\n", line, message ? message : "?");
+    std::printf("  ASSERT FAILED (line %d): %s\n", line, message ? message : "?");
     ++g_failed;
     return 0;
 }
 
-// Качает pulse() до конца таймаута — чтобы фоновые задачи и таймеры
-// успели доставить результаты в тестовый VM.
+// Pumps pulse() until the timeout so background tasks and timers deliver
+// their results into the test VM.
 int test_pump(lua_State *lua_vm)
 {
     const lua_Integer timeout_ms = luaL_checkinteger(lua_vm, 1);
@@ -174,7 +174,7 @@ int test_pump(lua_State *lua_vm)
     return 0;
 }
 
-// Имитирует остановку ресурса: ResourceStopping + ResourceStopped.
+// Simulates a resource stop: ResourceStopping + ResourceStopped.
 int test_resource_stop(lua_State *lua_vm)
 {
     mta::module::resource_stopping(lua_vm);
@@ -182,7 +182,7 @@ int test_resource_stop(lua_State *lua_vm)
     return 0;
 }
 
-// Имитирует рестарт ресурса: повторная регистрация функций в VM.
+// Simulates a resource restart: re-registers functions into the VM.
 int test_resource_start(lua_State *lua_vm)
 {
     mta::module::register_functions(lua_vm);
@@ -204,7 +204,7 @@ int main()
 
     if (!mta::module::initialize(&manager, module_name, module_author, &module_version))
     {
-        std::printf("FATAL: модулю не удалось инициализироваться\n");
+        std::printf("FATAL: the module failed to initialize\n");
         return 2;
     }
 
@@ -215,7 +215,7 @@ int main()
     lua_register(lua_vm, "test_resource_stop", test_resource_stop);
     lua_register(lua_vm, "test_resource_start", test_resource_start);
 
-    std::printf("harness: зарегистрировано функций модуля: %zu\n", manager.registered_names.size());
+    std::printf("harness: module functions registered: %zu\n", manager.registered_names.size());
 
     std::vector<fs::path> scripts;
     for (const auto &entry : fs::directory_iterator(SDK_TESTS_DIR))
@@ -243,7 +243,7 @@ int main()
     mta::module::shutdown();
     lua_close(lua_vm);
 
-    std::printf("\nharness: прошло %d, упало %d, ошибок скриптов %d\n", g_passed, g_failed,
+    std::printf("\nharness: passed %d, failed %d, script errors %d\n", g_passed, g_failed,
                 g_script_errors);
     return (g_failed > 0 || g_script_errors > 0) ? 1 : 0;
 }

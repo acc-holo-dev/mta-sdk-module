@@ -1,18 +1,18 @@
 #pragma once
 
-// userdata/метатаблицы: объекты с методами и авто-освобождением памяти.
+// userdata/metatables: objects with methods and automatic memory release.
 //
-// Позволяет создавать в Lua объекты, у которых есть методы (obj:method(...))
-// и деструктор (__gc), как в полноценных библиотеках (sockets, mysql).
+// Lets you create Lua objects that have methods (obj:method(...)) and a
+// destructor (__gc), like in full-featured libraries (sockets, mysql).
 //
 //     struct Counter { double value = 0; };
 //
-//     // Регистрация методов (один раз, лениво):
+//     // Register the methods (once, lazily):
 //     MTA_METHOD(Counter, "get", [](Counter &self) { return self.value; });
 //     MTA_METHOD(Counter, "set", [](Counter &self, double v) { self.value = v; });
 //
-//     // Создание объекта в функции модуля:
-//     MTA_LUA_FUNCTION("counter_create", "Создаёт счётчик.")
+//     // Create an object from a module function:
+//     MTA_LUA_FUNCTION("counter_create", "Creates a counter.")
 //     {
 //         auto [value] = mta::lua::args<double>(L);
 //         mta::userdata::Registry<Counter>::create(L, Counter{value});
@@ -23,7 +23,7 @@
 //     local c = counter_create(42)
 //     c:get()   -- 42
 //     c:set(100)
-//     c = nil   -- __gc вызовет ~Counter()
+//     c = nil   -- __gc calls ~Counter()
 
 #include "lua/bind.hpp"
 #include "lua/protect.hpp"
@@ -39,17 +39,17 @@ template <typename T>
 class Registry
 {
 public:
-    // Функция, регистрирующая методы типа (вызывается один раз на VM).
+    // Function that registers the type's methods (called once per VM).
     using Registrar = void (*)(lua_State *);
 
-    // Задаёт регистратор методов. Зовите один раз (например, в статическом
-    // инициализаторе) до первого create/check.
+    // Sets the method registrar. Call once (e.g. from a static initializer)
+    // before the first create/check.
     static void set_methods(Registrar registrar)
     {
         registrar_() = registrar;
     }
 
-    // Регистрирует метатаблицу в ЭТОМ VM (лениво) и зовёт регистратор методов.
+    // Registers the metatable in THIS VM (lazily) and calls the registrar.
     static void ensure(lua_State *L)
     {
         luaL_getmetatable(L, type_name());
@@ -62,24 +62,25 @@ public:
 
         luaL_newmetatable(L, type_name());
 
-        // __gc — деструктор объекта.
+        // __gc — the object destructor.
         lua_pushcfunction(L, &gc_metamethod);
         lua_setfield(L, -2, "__gc");
 
-        // __index — таблица методов.
+        // __index — the method table.
         lua_newtable(L);
         lua_setfield(L, -2, "__index");
 
         lua_pop(L, 1);
 
-        // Методы регистрируются в этом VM (у каждого ресурса свой lua_State).
+        // Methods are registered in this VM (every resource has its own
+        // lua_State).
         if (registrar_() != nullptr)
         {
             registrar_()(L);
         }
     }
 
-    // Создаёт userdata с T на стеке, привязывает метатаблицу. Возвращает T*.
+    // Creates T as userdata on the stack and attaches the metatable. Returns T*.
     static T *create(lua_State *L, T value)
     {
         ensure(L);
@@ -90,7 +91,7 @@ public:
         return object;
     }
 
-    // Проверяет userdata по индексу; бросает понятную ошибку на несовпадении.
+    // Validates userdata at the index; throws a readable error on a mismatch.
     static T *check(lua_State *L, int index)
     {
         if (lua_type(L, index) != LUA_TUSERDATA)
@@ -115,7 +116,7 @@ public:
         return static_cast<T *>(lua_touserdata(L, index));
     }
 
-    // Регистрирует метод (obj:method(...)). Tag — уникальный номер места вызова.
+    // Registers a method (obj:method(...)). Tag is unique per call site.
     template <std::size_t Tag, typename F>
     static void add_method(lua_State *L, const char *name, F fn)
     {
@@ -124,8 +125,8 @@ public:
 
         luaL_getmetatable(L, type_name());
         lua_getfield(L, -1, "__index");
-        // lua_pushcclosure напрямую: макрос lua_pushcfunction не переваривает
-        // запятую в шаблонных аргументах method_holder<Tag, F>.
+        // lua_pushcclosure directly: the lua_pushcfunction macro cannot cope
+        // with a comma in template arguments like method_holder<Tag, F>.
         lua_pushcclosure(L, &method_holder<Tag, F>::trampoline, 0);
         lua_setfield(L, -2, name);
         lua_pop(L, 2);
@@ -174,7 +175,7 @@ private:
         }
     };
 
-    // Вызывает fn(*self, args...), где args читаются со стека с индекса 2.
+    // Calls fn(*self, args...), with args read from the stack starting at 2.
     template <typename F>
     static int invoke_method(lua_State *L, T *self, F &fn)
     {
@@ -183,11 +184,11 @@ private:
         using result_type = typename traits::result;
         constexpr std::size_t arity = traits::arity;
 
-        static_assert(arity >= 1, "метод должен принимать self первым параметром");
+        static_assert(arity >= 1, "a method must take self as its first parameter");
 
         std::size_t index = 2;
         auto args = [&index, L]<std::size_t... I>(std::index_sequence<I...>) {
-            // I + 1 — пропускаем self (первый параметр сигнатуры).
+            // I + 1 skips self (the first signature parameter).
             return std::tuple{
                 mta::lua::detail::pull_param<std::tuple_element_t<I + 1, args_type>>(L, index)...};
         }(std::make_index_sequence<arity - 1>{});
@@ -208,6 +209,6 @@ private:
 };
 } // namespace mta::userdata
 
-// Регистрирует метод объекта: MTA_METHOD(Type, "имя", лямбда);
-// Лямбда принимает self (Type&) первым параметром.
+// Registers an object method: MTA_METHOD(Type, "name", lambda);
+// The lambda takes self (Type&) as its first parameter.
 #define MTA_METHOD(Type, Name, Fn)     ::mta::userdata::Registry<Type>::add_method<__COUNTER__>(L, (Name), (Fn))

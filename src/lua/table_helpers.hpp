@@ -1,7 +1,7 @@
 #pragma once
 
-// Удобная работа с полями таблиц: чтение/запись по строковому ключу без
-// ручного обхода Table.fields, плюс конвертация Argument → C++-тип.
+// Convenient table-field access: read/write by string key without manually
+// walking Table.fields, plus Argument -> C++-type conversion.
 //
 //     auto [t] = mta::lua::args<mta::lua::Table>(L);
 //     std::string name = mta::lua::get_field<std::string>(t, "name", "unknown");
@@ -18,7 +18,7 @@
 
 namespace mta::lua
 {
-// Имя типа Argument для сообщений об ошибках.
+// Argument type name for error messages.
 inline const char *type_name_of(const Argument &value) noexcept
 {
     switch (value.type())
@@ -42,7 +42,7 @@ template <typename T>
 inline constexpr bool is_optional<std::optional<T>> = true;
 } // namespace detail
 
-// Конвертирует Argument в T; бросает понятную ошибку при несовпадении типа.
+// Converts an Argument into T; throws a readable error on a type mismatch.
 template <typename T>
 T convert(const Argument &value)
 {
@@ -56,7 +56,7 @@ T convert(const Argument &value)
     {
         if (!value.is_table())
         {
-            raise_error("поле должно быть таблицей, а это ", type_name_of(value));
+            raise_error("field must be a table, got ", type_name_of(value));
         }
         return value.as_table();
     }
@@ -64,7 +64,7 @@ T convert(const Argument &value)
     {
         if (value.type() != Argument::Type::Boolean)
         {
-            raise_error("поле должно быть boolean, а это ", type_name_of(value));
+            raise_error("field must be a boolean, got ", type_name_of(value));
         }
         return value.as_boolean();
     }
@@ -72,7 +72,7 @@ T convert(const Argument &value)
     {
         if (value.type() != Argument::Type::String)
         {
-            raise_error("поле должно быть строкой, а это ", type_name_of(value));
+            raise_error("field must be a string, got ", type_name_of(value));
         }
         return value.as_string();
     }
@@ -80,7 +80,7 @@ T convert(const Argument &value)
     {
         if (value.type() != Argument::Type::Number)
         {
-            raise_error("поле должно быть числом, а это ", type_name_of(value));
+            raise_error("field must be a number, got ", type_name_of(value));
         }
         return static_cast<U>(value.as_number());
     }
@@ -88,7 +88,7 @@ T convert(const Argument &value)
     {
         if (value.type() != Argument::Type::Number)
         {
-            raise_error("поле должно быть числом, а это ", type_name_of(value));
+            raise_error("field must be a number, got ", type_name_of(value));
         }
         return static_cast<U>(value.as_number());
     }
@@ -102,11 +102,11 @@ T convert(const Argument &value)
     }
     else
     {
-        static_assert(!sizeof(U), "неподдерживаемый тип поля таблицы");
+        static_assert(!sizeof(U), "unsupported table field type");
     }
 }
 
-// Ищет поле по строковому ключу; nullptr, если нет.
+// Finds a field by string key; nullptr if absent.
 inline const Argument *find_field(const Table &table, const char *key) noexcept
 {
     if (key == nullptr)
@@ -123,7 +123,7 @@ inline const Argument *find_field(const Table &table, const char *key) noexcept
     return nullptr;
 }
 
-// Читает поле с дефолтом (если поля нет — дефолт).
+// Reads a field with a default (the default is used when the field is absent).
 template <typename T>
 T get_field(const Table &table, const char *key, T default_value)
 {
@@ -135,19 +135,19 @@ T get_field(const Table &table, const char *key, T default_value)
     return convert<T>(*field);
 }
 
-// Читает поле; бросает, если поля нет.
+// Reads a field; throws when the field is absent.
 template <typename T>
 T get_field(const Table &table, const char *key)
 {
     const Argument *field = find_field(table, key);
     if (field == nullptr)
     {
-        raise_error("в таблице нет поля '", key ? key : "?", "'");
+        raise_error("table has no field '", key ? key : "?", "'");
     }
     return convert<T>(*field);
 }
 
-// Записывает (или перезаписывает) поле.
+// Writes (or overwrites) a field.
 inline void set_field(Table &table, const char *key, Argument value)
 {
     if (key == nullptr)

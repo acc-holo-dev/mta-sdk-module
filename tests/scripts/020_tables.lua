@@ -19,7 +19,7 @@ test_assert(err and string.find(err, "must be a table", 1, true) ~= nil,
 local version = sample_version()
 test_assert(type(version) == "table", "sample_version returns a table")
 test_assert(version.module == "Base Module", "module name")
-test_assert(version.module_version == 1.0, "module version")
+test_assert(math.abs(version.module_version - 1.1) < 1e-6, "module version")
 test_assert(version.mta == "1.6.0-harness", "server version from the manager")
 test_assert(version.netcode == 42, "netcode version")
 test_assert(version.os == "harness", "operating system name")

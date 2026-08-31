@@ -130,7 +130,7 @@ const Argument &Arguments::at(std::size_t index) const
 {
     if (index >= arguments_.size())
     {
-        throw std::out_of_range("Arguments: индекс вне диапазона");
+        throw std::out_of_range("Arguments: index out of range");
     }
     return arguments_[index];
 }

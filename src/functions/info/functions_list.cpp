@@ -1,4 +1,4 @@
-// Встроенная интроспекция: список всех функций модуля с их описаниями.
+// Built-in introspection: a list of every module function with its description.
 
 #include <string>
 
@@ -6,7 +6,7 @@
 #include "registry/registry.hpp"
 
 MTA_LUA_FUNCTION("module_functions",
-    "Возвращает таблицу {имя = описание} со всеми функциями модуля.")
+    "Returns a table {name = description} with all module functions.")
 {
     mta::lua::Table table;
     for (const auto &spec : mta::registry::Registry::instance().functions())

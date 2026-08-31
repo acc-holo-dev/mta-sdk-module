@@ -1,5 +1,5 @@
-// Чтение вложенной таблицы и сборка таблицы-результата. Параметр Table
-// проверяется автоматически: не-таблица даст понятную Lua-ошибку.
+// Reading nested tables and building a result table. The Table parameter is
+// validated automatically: a non-table produces a readable Lua error.
 //
 //   sample_table_stats({10, 20, {30, 40}, name = "x", flag = true})
 //     -> {values=7, numbers=4, strings=1, sum=100, depth=2}
@@ -57,7 +57,7 @@ void collect_value(const mta::lua::Argument &value, int level, TableStats &stats
         ++stats.values;
         break;
     case Argument::Type::Table:
-        // Таблица уже сидит на уровне level; её дети будут на level+1.
+        // The table already sits at 'level'; its children are at level + 1.
         collect_table(value.as_table(), level, stats);
         break;
     default:
@@ -67,7 +67,7 @@ void collect_value(const mta::lua::Argument &value, int level, TableStats &stats
 } // namespace
 
 MTA_LUA_FUNCTION("sample_table_stats",
-    "Возвращает статистику таблицы: {values, numbers, strings, sum, depth}.")
+    "Returns table statistics: {values, numbers, strings, sum, depth}.")
 {
     auto [table] = mta::lua::args<mta::lua::Table>(L);
 

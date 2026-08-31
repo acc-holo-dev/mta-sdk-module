@@ -17,13 +17,13 @@ namespace
 constexpr Info module_details{
     "Base Module",
     "anon",
-    1.0F,
+    1.1F,
 };
 
 ILuaModuleManager10 *g_module_manager = nullptr;
 
-// Сервер передаёт буферы MAX_INFO_LENGTH (128 байт) — копируем с гарантией
-// завершающего нуля.
+// The server provides MAX_INFO_LENGTH (128 byte) buffers — copy with a
+// guaranteed terminating NUL.
 void copy_info_string(char *destination, const char *source) noexcept
 {
     if (destination == nullptr || source == nullptr)
@@ -76,7 +76,7 @@ bool initialize(ILuaModuleManager10 *manager, char *module_name, char *author, f
     mta::async::Scheduler::instance().start();
 
     const char *server_version = manager->GetVersionString();
-    mta::log::info("модуль: загружен ", module_details.name, " (MTA ",
+    mta::log::info("module: loaded ", module_details.name, " (MTA ",
                    server_version ? server_version : "?", ")");
     return true;
 }
@@ -89,21 +89,21 @@ void register_functions(lua_State *lua_vm) noexcept
     }
 
     mta::registry::Registry::instance().register_all(*g_module_manager, lua_vm);
-    mta::log::debug(lua_vm, "модуль: зарегистрировано ",
-                    mta::registry::Registry::instance().size(), " функций");
+    mta::log::debug(lua_vm, "module: registered ",
+                    mta::registry::Registry::instance().size(), " functions");
 }
 
 bool pulse() noexcept
 {
-    // Раздаём результаты фоновых задач и срабатываем таймеры; бросаний нет.
+    // Dispatch background-task results and fire timers; never throws.
     mta::async::Scheduler::instance().pump();
     return true;
 }
 
 bool shutdown() noexcept
 {
-    // Порядок важен: сначала останавливаем воркеров (в completions ещё могут
-    // жить callback-и), затем освобождаем Lua-ссылки, пока VM достижимы.
+    // Order matters: stop the workers first (completions may still hold
+    // callbacks), then release Lua references while the VMs are reachable.
     mta::async::Scheduler::instance().stop();
     mta::async::release_all_callbacks();
     mta::resources::Hub::instance().notify_all_released();
@@ -136,8 +136,8 @@ bool resource_stopped(lua_State *lua_vm) noexcept
 } // namespace mta::module
 
 // ---------------------------------------------------------------------------
-// Точки входа MTA. Загрузчик сервера (CLuaModule в mtasa-blue) резолвит их
-// по имени через LoadLibrary/dlsym; каждая обязана существовать.
+// MTA entry points. The server loader (CLuaModule in mtasa-blue) resolves
+// them by name through LoadLibrary/dlsym; every one of them must exist.
 // ---------------------------------------------------------------------------
 
 MTAEXPORT bool InitModule(ILuaModuleManager10 *manager, char *module_name, char *author, float *version)

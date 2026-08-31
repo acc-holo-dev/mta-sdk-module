@@ -29,7 +29,7 @@ void Hub::remove(Sink &sink) noexcept
 
 void Hub::notify_resource_stopping(const std::string &resource)
 {
-    // Итерируемся по копии: sink может снять себя прямо в колбэке.
+    // Iterate over a copy: a sink may unsubscribe itself inside a callback.
     const auto sinks = sinks_;
     for (auto *sink : sinks)
     {

@@ -1,8 +1,7 @@
 #pragma once
 
-// Плоский список значений Lua (включая таблицы). Используется для
-// маршалинга наборов аргументов между Lua и C++, например чтобы
-// передать результат фоновой задачи в callback.
+// Flat list of Lua values (tables included). Used to marshal argument sets
+// between Lua and C++, e.g. to hand a background task's result to a callback.
 
 #include "lua/argument.hpp"
 
@@ -16,15 +15,14 @@ class Arguments
 public:
     Arguments() = default;
 
-    // Читает все аргументы со стека, начиная с index_begin (по умолчанию 1).
+    // Reads all arguments from the stack, starting at index_begin (default 1).
     void read(lua_State *lua_vm, int index_begin = 1);
-    // Кладёт все значения на стек, возвращает количество.
+    // Pushes every value onto the stack, returns how many were pushed.
     int push(lua_State *lua_vm) const;
     void append(const Arguments &other);
 
-    // Вызывает глобальную Lua-функцию по имени с этими аргументами
-    // (через pcall). Возвращает false и заполняет error_out (если задан)
-    // при неудаче.
+    // Calls a global Lua function by name with these arguments (via pcall).
+    // Returns false and fills error_out (when given) on failure.
     bool call(lua_State *lua_vm, const char *function_name, std::string *error_out = nullptr) const;
 
     Argument &push_nil();

@@ -1,6 +1,6 @@
--- Новые возможности: userdata, события, хелперы таблиц.
+-- New capabilities: userdata, events, table helpers.
 
--- userdata: объект-счётчик с методами
+-- userdata: counter object with methods
 local c = counter_create(42)
 test_assert(c:get() == 42, "counter get")
 c:set(100)
@@ -8,7 +8,7 @@ test_assert(c:get() == 100, "counter set")
 test_assert(c:add(5) == 105, "counter add returns new value")
 test_assert(c:get() == 105, "counter add persisted")
 
--- события: модуль триггерит Lua-событие
+-- events: the module triggers a Lua event
 local events = {}
 root = {}
 function triggerEvent(name, source, ...)
@@ -19,14 +19,14 @@ test_assert(events[1] ~= nil, "event triggered")
 test_assert(events[1].name == "onTest", "event name")
 test_assert(events[1].args[1] == 1 and events[1].args[2] == "two", "event args")
 
--- хелперы таблиц: чтение полей
-local name, hp = sample_table_get({name = "Вася", hp = 100})
-test_assert(name == "Вася" and hp == 100, "table get fields")
+-- table helpers: reading fields
+local name, hp = sample_table_get({name = "Alice", hp = 100})
+test_assert(name == "Alice" and hp == 100, "table get fields")
 
--- хелперы таблиц: дефолт при отсутствии поля
+-- table helpers: default when the field is absent
 local name2, hp2 = sample_table_get({})
 test_assert(name2 == "unknown" and hp2 == 0, "table get defaults")
 
--- хелперы таблиц: запись поля
-local t = sample_table_set({hp = 50}, "Петя")
-test_assert(t.name == "Петя" and t.hp == 50, "table set field")
+-- table helpers: writing a field
+local t = sample_table_set({hp = 50}, "Alice")
+test_assert(t.name == "Alice" and t.hp == 50, "table set field")

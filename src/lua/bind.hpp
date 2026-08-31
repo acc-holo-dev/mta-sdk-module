@@ -1,40 +1,41 @@
 #pragma once
 
-// Типизированный биндер Lua-функций — главный API модуля.
+// Typed binder for Lua functions — the module's main API.
 //
-//     MTA_LUA_FUNC("my_sum", "Складывает два числа.",
+//     MTA_LUA_FUNC("my_sum", "Adds two numbers.",
 //         [](double a, double b) { return a + b; });
 //
-// Типы параметров читаются прямо из сигнатуры: каркас сам проверит аргументы,
-// сам сформирует понятную Lua-ошибку при неверном типе и сам вернёт результат
-// в Lua. Никаких индексов, check_* и push_results руками писать не нужно.
+// Parameter types are read straight from the signature: the framework checks
+// arguments itself, produces a readable Lua error on a type mismatch and
+// returns the result to Lua automatically. No indices, check_* or manual
+// push_results are needed.
 //
-// Доступные типы параметров:
-//   double / float          число
-//   bool                    булево
-//   int / int64_t / ...     целое (с проверкой диапазона)
-//   std::string             строка
-//   std::string_view        строка без копирования (живёт до конца вызова)
-//   mta::lua::Argument      любое значение (таблицы читаются рекурсивно)
-//   mta::lua::Table         таблица (ошибка, если передали не таблицу)
-//   mta::async::Callback    Lua-функция (стабильная ссылка на неё)
-//   std::optional<T>        необязательный аргумент: nil/нет -> nullopt
-//   mta::lua::rest_args     хвостовые (вариадические) аргументы, только последним
-//   mta::lua::context       VM и имя ресурса; НЕ занимает аргумент в Lua
+// Supported parameter types:
+//   double / float          number
+//   bool                    boolean
+//   int / int64_t / ...     integer (range-checked)
+//   std::string             string
+//   std::string_view        string without copying (valid until call end)
+//   mta::lua::Argument      any value (tables are read recursively)
+//   mta::lua::Table         table (error if a non-table was passed)
+//   mta::async::Callback    Lua function (stable reference to it)
+//   std::optional<T>        optional argument: nil/absent -> nullopt
+//   mta::lua::rest_args     trailing (variadic) arguments, last parameter only
+//   mta::lua::context       VM and resource name; takes NO Lua argument
 //
-// Необязательные параметры пишутся и обычными C++-дефолтами:
+// Optional parameters may also be written with plain C++ defaults:
 //
-//     MTA_LUA_FUNC("my_greet", "Приветствие.",
-//         [](std::string name, std::string greeting = "привет") {
+//     MTA_LUA_FUNC("my_greet", "Greets a name.",
+//         [](std::string name, std::string greeting = "hi") {
 //             return greeting + ", " + name;
 //         });
 //
-// Типы результатов: любой из параметров-значений, а также
-//   void                       ничего не возвращать
-//   std::tuple / std::pair     несколько результатов
-//   std::vector<T>             элементы разворачиваются в список результатов
-//   std::optional<T>           nil, если значения нет
-//   mta::lua::Arguments        целый список результатов
+// Result types: any value-parameter type, plus
+//   void                       return nothing
+//   std::tuple / std::pair     several results
+//   std::vector<T>             elements are expanded into a result list
+//   std::optional<T>           nil when the value is absent
+//   mta::lua::Arguments        a whole result list
 
 #include "lua/argument.hpp"
 #include "lua/arguments.hpp"
@@ -57,15 +58,15 @@
 
 namespace mta::lua
 {
-// Хвостовые (вариадические) аргументы: последний параметр функции ловит всё,
-// что передали сверх фиксированных аргументов.
+// Trailing (variadic) arguments: the function's last parameter catches
+// everything passed beyond the fixed arguments.
 struct rest_args
 {
     Arguments values;
 };
 
-// Контекст вызова: VM и имя вызывающего ресурса. Параметр этого типа не
-// занимает аргумент в Lua и может стоять в сигнатуре где угодно.
+// Call context: VM and the name of the calling resource. A parameter of this
+// type consumes no Lua argument and may appear anywhere in the signature.
 struct context
 {
     lua_State *vm = nullptr;
@@ -74,7 +75,7 @@ struct context
 
 namespace detail
 {
-// --- подпись вызываемого ------------------------------------------------------
+// --- callable signature -------------------------------------------------------
 
 template <typename R, typename... Args>
 struct callable_traits_base
@@ -122,7 +123,7 @@ struct callable_traits<R (F::*)(Args...) noexcept> : callable_traits_base<R, Arg
 {
 };
 
-// --- классификация параметров -------------------------------------------------
+// --- parameter classification --------------------------------------------------
 
 template <typename T>
 inline constexpr bool is_optional_v = false;
@@ -134,12 +135,13 @@ inline constexpr bool is_rest_v = false;
 template <>
 inline constexpr bool is_rest_v<rest_args> = true;
 
-// Параметр требует явного Lua-аргумента: не optional, не rest и не context.
+// A parameter that requires an explicit Lua argument: not optional, not rest
+// and not context.
 template <typename T>
 inline constexpr bool is_required_param_v =
     !is_optional_v<T> && !is_rest_v<T> && !std::is_same_v<T, context>;
 
-// --- чтение одного аргумента ---------------------------------------------------
+// --- reading a single argument --------------------------------------------------
 
 template <typename T>
 T pull_arg(lua_State *L, int index)
@@ -194,7 +196,7 @@ T pull_arg(lua_State *L, int index)
     }
     else if constexpr (std::is_same_v<U, std::string_view>)
     {
-        // Строка живёт в Lua до конца вызова, копия не нужна.
+        // The string lives in Lua until the call ends; no copy is needed.
         const int normalized = normalize_index(L, index);
         if (lua_isstring(L, normalized) == 0)
         {
@@ -237,11 +239,11 @@ T pull_arg(lua_State *L, int index)
     }
     else
     {
-        static_assert(!sizeof(U), "неподдерживаемый тип параметра (см. lua/bind.hpp)");
+        static_assert(!sizeof(U), "unsupported parameter type (see lua/bind.hpp)");
     }
 }
 
-// Читает параметр с учётом context (не потребляет аргумент Lua).
+// Reads a parameter, honoring context (which consumes no Lua argument).
 template <typename T>
 T pull_param(lua_State *L, std::size_t &index)
 {
@@ -260,7 +262,7 @@ T pull_param(lua_State *L, std::size_t &index)
     }
 }
 
-// --- выкладка результата -------------------------------------------------------
+// --- result layout --------------------------------------------------------------
 
 template <typename T>
 struct is_tuple_like : std::false_type
@@ -317,7 +319,7 @@ int push_result(lua_State *L, T &&value)
     }
     else if constexpr (std::is_same_v<U, Arguments>)
     {
-        // Arguments — это СПИСОК результатов: кладём все и возвращаем их число.
+        // Arguments is a RESULT LIST: push all of them and return the count.
         return value.push(L);
     }
     else
@@ -327,14 +329,15 @@ int push_result(lua_State *L, T &&value)
     }
 }
 
-// --- арность и вызов ------------------------------------------------------------
+// --- arity and invocation ----------------------------------------------------------
 
-// Хранилище замыкания; определено ниже.
+// Closure storage; defined below.
 template <std::size_t Tag, typename F>
 struct holder;
 
-// Вызывает f с первыми K параметрами; недостающие синтезируются
-// (optional -> nullopt, rest -> пусто), дефолты достанет сам C++.
+// Calls f with the first K parameters; missing ones are synthesized
+// (optional -> nullopt, rest -> empty); C++ defaults are applied by the
+// compiler itself.
 template <std::size_t Tag, typename F, std::size_t K>
 int invoke_prefix(lua_State *L)
 {
@@ -357,7 +360,7 @@ int invoke_prefix(lua_State *L)
     }
 }
 
-// Можно ли вызвать f с первыми J параметрами (учитывает C++-дефолты).
+// Can f be invoked with the first J parameters (C++ defaults included)?
 template <typename F, std::size_t J, std::size_t... I>
 constexpr bool prefix_invocable_impl(std::index_sequence<I...>)
 {
@@ -368,8 +371,8 @@ constexpr bool prefix_invocable_impl(std::index_sequence<I...>)
 template <typename F, std::size_t J>
 constexpr bool prefix_invocable_v = prefix_invocable_impl<F, J>(std::make_index_sequence<J>{});
 
-// required_counts[J] — сколько параметров среди первых J требуют явный
-// Lua-аргумент (не optional, не rest, не context).
+// required_counts[J] — how many of the first J parameters require an explicit
+// Lua argument (not optional, not rest, not context).
 template <typename F, std::size_t... I>
 constexpr std::array<std::size_t, sizeof...(I) + 1> required_counts_impl(std::index_sequence<I...>)
 {
@@ -403,7 +406,7 @@ struct dispatch_slot
         }
         else
         {
-            // Недостижимо: слоты без invocable никогда не выбираются.
+            // Unreachable: slots without invocable are never selected.
             raise_error("argument #", J + 1, " is missing");
         }
     }
@@ -417,7 +420,7 @@ constexpr std::array<dispatch_entry, sizeof...(Js)> make_dispatch_table_impl(
         dispatch_entry{&dispatch_slot<Tag, F, Js>::invoke, dispatch_slot<Tag, F, Js>::invocable}...};
 }
 
-// Хранилище функции: статическая копия замыкания + точка входа для Lua.
+// Function storage: a static copy of the closure plus the entry point for Lua.
 template <std::size_t Tag, typename F>
 struct holder
 {
@@ -443,8 +446,8 @@ struct holder
                     return table[J].invoke(L);
                 }
             }
-            // Ни одна арность не подошла: первый обязательный параметр
-            // сгенерирует типизированную ошибку "got no value"/"got nil".
+            // No arity matched: the first required parameter will produce a
+            // typed "got no value"/"got nil" error.
             return error_probe(L);
         }
         catch (const std::exception &e)
@@ -457,7 +460,8 @@ struct holder
         }
     }
 
-    // Читает все параметры ради понятной ошибки; синтезируемые читаются молча.
+    // Reads every parameter just to produce a readable error; synthesized
+    // parameters are read silently.
     static int error_probe(lua_State *L)
     {
         using args_type = typename traits::args;
@@ -470,7 +474,7 @@ struct holder
     }
 };
 
-// rest_args может быть только последним параметром.
+// rest_args may only be the last parameter.
 template <typename F, std::size_t... I>
 constexpr bool rest_only_last_impl(std::index_sequence<I...>)
 {
@@ -486,28 +490,28 @@ template <typename F>
 constexpr bool rest_only_last_v = rest_only_last_impl<F>(
     std::make_index_sequence<callable_traits<F>::arity>{});
 
-// Добавляет функцию в реестр (реализация в registry/registry.cpp).
+// Adds a function to the registry (implemented in registry/registry.cpp).
 bool register_function(const char *name, const char *description, int (*entry)(lua_State *));
 
-// Регистрирует типизированную функцию; Tag — уникальный номер места вызова.
+// Registers a typed function; Tag is a unique number per call site.
 template <std::size_t Tag, typename F>
 bool register_typed(const char *name, const char *description, F function)
 {
     using G = std::decay_t<F>;
 
-    static_assert(rest_only_last_v<G>, "rest_args может быть только последним параметром");
+    static_assert(rest_only_last_v<G>, "rest_args may only be the last parameter");
 
     holder<Tag, G>::stored = std::move(function);
     return register_function(name, description, &holder<Tag, G>::entry);
 }
 } // namespace detail
 
-// Читает типизированные аргументы (1..N) как кортеж — для structured bindings:
+// Reads typed arguments (1..N) as a tuple — for structured bindings:
 //
 //     auto [a, b] = mta::lua::args<double, double>(L);
 //
-// Типы проверяются автоматически, optional<T> принимает nil/отсутствие.
-// Лишние аргументы игнорируются, недостающие дают понятную Lua-ошибку.
+// Types are validated automatically; optional<T> accepts nil/absence.
+// Extra arguments are ignored; missing ones produce a readable Lua error.
 template <typename... Ts>
 std::tuple<Ts...> args(lua_State *L)
 {

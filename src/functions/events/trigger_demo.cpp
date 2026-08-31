@@ -1,4 +1,4 @@
-// События: модуль триггерит событие в Lua-скрипты ресурса.
+// Events: the module triggers an event into the resource's Lua scripts.
 //
 //     -- Lua:
 //     addEventHandler("onSampleEvent", root, function(...) ... end)
@@ -9,12 +9,12 @@
 #include "registry/registry.hpp"
 
 MTA_LUA_FUNCTION("sample_trigger_event",
-    "Триггерит событие с заданным именем и аргументами (источник — root).")
+    "Triggers an event with the given name and arguments (source is root).")
 {
     auto [name] = mta::lua::args<std::string>(L);
 
     mta::lua::Arguments arguments;
-    arguments.read(L, 2); // все аргументы после имени
+    arguments.read(L, 2); // every argument after the name
 
     const bool ok = mta::events::trigger(L, name.c_str(), arguments);
     return mta::lua::push_results(L, ok);

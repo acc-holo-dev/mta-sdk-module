@@ -1,6 +1,6 @@
 #pragma once
 
-// Единая точка подключения Lua 5.1 (вендоренные заголовки из vendor/mta-sdk).
+// Single point of inclusion for Lua 5.1 (vendored headers from vendor/mta-sdk).
 
 extern "C"
 {

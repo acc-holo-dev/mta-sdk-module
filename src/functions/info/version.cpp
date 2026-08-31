@@ -1,4 +1,4 @@
-// Функция без аргументов, возвращающая таблицу. Сведения берутся у менеджера.
+// An argument-less function returning a table. Facts come from the manager.
 
 #include <string>
 
@@ -9,7 +9,7 @@
 #include "registry/registry.hpp"
 
 MTA_LUA_FUNCTION("sample_version",
-    "Возвращает таблицу со сведениями о версии модуля и сервера.")
+    "Returns a table with module and server version information.")
 {
     const mta::module::Info info = mta::module::info();
     auto *manager = mta::module::manager();
