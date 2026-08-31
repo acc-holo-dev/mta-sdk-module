@@ -18,12 +18,15 @@ namespace mta::lua
 // when reading and replaced with nil when writing.
 inline constexpr int max_table_depth = 32;
 
+// Forward declaration: Table below holds containers of Argument values.
+class Argument;
+
 // Table snapshot: the integer sequence part (1..n) and string-keyed fields.
 // Keys of other types (boolean, tables, ...) are discarded when reading.
 struct Table
 {
-    std::vector<struct Argument> array;
-    std::vector<std::pair<std::string, struct Argument>> fields;
+    std::vector<Argument> array;
+    std::vector<std::pair<std::string, Argument>> fields;
 };
 
 class Argument

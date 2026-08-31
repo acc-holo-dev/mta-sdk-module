@@ -5,7 +5,7 @@
 
 #include <string>
 
-struct ILuaModuleManager10;
+class ILuaModuleManager10;
 struct lua_State;
 
 namespace mta::module

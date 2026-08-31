@@ -24,7 +24,7 @@
 #include <cstddef>
 #include <vector>
 
-struct ILuaModuleManager10;
+class ILuaModuleManager10;
 
 namespace mta::registry
 {

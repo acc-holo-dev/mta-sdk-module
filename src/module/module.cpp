@@ -23,15 +23,20 @@ constexpr Info module_details{
 ILuaModuleManager10 *g_module_manager = nullptr;
 
 // The server provides MAX_INFO_LENGTH (128 byte) buffers — copy with a
-// guaranteed terminating NUL.
+// guaranteed terminating NUL. A hand-written loop avoids both the MSVC
+// deprecation warning for strncpy and any platform-specific _s variant.
 void copy_info_string(char *destination, const char *source) noexcept
 {
     if (destination == nullptr || source == nullptr)
     {
         return;
     }
-    std::strncpy(destination, source, MAX_INFO_LENGTH);
-    destination[MAX_INFO_LENGTH - 1] = '\0';
+    std::size_t i = 0;
+    for (; i + 1 < MAX_INFO_LENGTH && source[i] != '\0'; ++i)
+    {
+        destination[i] = source[i];
+    }
+    destination[i] = '\0';
 }
 } // namespace
 
