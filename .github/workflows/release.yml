@@ -1,0 +1,68 @@
+name: Release
+
+# Attaches ready-to-use module binaries to a GitHub Release whenever a
+# version tag (v*) is pushed. Builds both platforms in parallel.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build artifacts (${{ matrix.preset }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - preset: linux-gcc
+            runs-on: ubuntu-latest
+            artifact_name: ml_base-linux-x64
+          - preset: win-mingw
+            runs-on: windows-latest
+            artifact_name: ml_base-win-x64
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++
+
+      - name: Set up MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          set -e
+          mkdir -p dist
+          cp build/${{ matrix.preset }}/module/*/ml_base.* dist/
+          cp LICENSE dist/
+          ls -la dist/
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

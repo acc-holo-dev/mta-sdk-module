@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   linux:
     name: Linux (GCC)
@@ -23,7 +26,7 @@ jobs:
       - name: Test
         run: ctest --preset linux-gcc --output-on-failure
 
-  windows:
+  windows-mingw:
     name: Windows (MinGW-w64)
     runs-on: windows-latest
     steps:
@@ -49,3 +52,23 @@ jobs:
       - name: Test
         shell: msys2 {0}
         run: ctest --preset win-mingw --output-on-failure
+
+  windows-msvc:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Ninja
+        run: choco install ninja -y --no-progress
+
+      - name: Configure
+        run: cmake --preset win-msvc
+
+      - name: Build
+        run: cmake --build --preset win-msvc
+
+      - name: Test
+        run: ctest --preset win-msvc --output-on-failure
