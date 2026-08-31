@@ -1,17 +1,17 @@
-# Туториал: модуль с нуля
+# Tutorial: a module from scratch
 
-Пошаговый путь от пустой папки до работающего модуля, загруженного на
-MTA-сервер. Предполагается, что у вас уже есть компилятор (MinGW-w64 или
-MSVC на Windows, GCC на Linux), CMake ≥ 3.27 и Ninja.
+A step-by-step path from an empty folder to a working module loaded on an
+MTA server. You need a compiler (MinGW-w64 or MSVC on Windows, GCC on Linux),
+CMake ≥ 3.27 and Ninja.
 
-## Шаг 1. Клонируем основу
+## Step 1. Clone the base
 
 ```bash
-git clone <ваш-репозиторий> my-module
+git clone <your-repository> my-module
 cd my-module
 ```
 
-## Шаг 2. Собираем как есть
+## Step 2. Build as-is
 
 ```bash
 # Windows (MinGW-w64)
@@ -23,65 +23,65 @@ cmake --preset linux-gcc
 cmake --build --preset linux-gcc
 ```
 
-Результат: `build/win-mingw/module/win-x64/ml_base.dll` (или `.so` на Linux).
+Result: build/win-mingw/module/win-x64/ml_base.dll (or .so on Linux).
 
-## Шаг 3. Проверяем тесты
+## Step 3. Run the tests
 
 ```bash
 ctest --preset win-mingw
 ```
 
-Должно быть `100% tests passed`. Это значит, что основа работает.
+You should see 100% tests passed. That means the base works.
 
-## Шаг 4. Добавляем первую функцию
+## Step 4. Add your first function
 
-Создайте файл `src/functions/basics/my_sum.cpp`:
+Create src/functions/basics/my_sum.cpp:
 
 ```cpp
 #include "registry/registry.hpp"
 
-MTA_LUA_FUNCTION("my_sum", "Складывает два числа.")
+MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 {
     auto [a, b] = mta::lua::args<double, double>(L);
     return mta::lua::push_results(L, a + b);
 }
 ```
 
-Пересоберите — функция `my_sum` уже доступна. Никаких правок в CMake или
-центральных файлах: сборка подхватывает новые .cpp автоматически.
+Rebuild — the my_sum function is already available. No CMake or central file
+edits needed: the build picks up new .cpp files automatically.
 
-## Шаг 5. Переименовываем модуль
+## Step 5. Rename the module
 
-1. В `src/module/module.cpp` поменяйте `module_details` (имя, автор, версия).
-2. В `CMakeLists.txt` поменяйте `OUTPUT_NAME` (имя DLL).
-3. Пересоберите.
+1. In src/module/module.cpp change module_details (name, author, version).
+2. In CMakeLists.txt change OUTPUT_NAME (the DLL name).
+3. Rebuild.
 
-## Шаг 6. Ставим на сервер
+## Step 6. Install on the server
 
-1. Скопируйте `ml_base.dll` в `mods/deathmatch/modules/` сервера.
-2. В `mtaserver.conf` добавьте:
+1. Copy ml_base.dll into the server's mods/deathmatch/modules/.
+2. Add to mtaserver.conf:
 
 ```xml
 <module src="ml_base"/>
 ```
 
-3. Перезапустите сервер. В консоли появится:
+3. Restart the server. The console shows:
 
 ```
-MODULE: Loaded "Base Module" (1.00) by "anon"
+MODULE: Loaded "Base Module" (1.10) by "anon"
 ```
 
-## Шаг 7. Проверяем в Lua
+## Step 7. Check in Lua
 
-В любом ресурсе сервера:
+In any server resource:
 
 ```lua
 outputChatBox("2 + 3 = " .. my_sum(2, 3))  -- 2 + 3 = 5
 ```
 
-## Что дальше
+## What's next
 
-- [README.md](../README.md) — все рецепты функций.
-- [API.md](API.md) — полный справочник API.
-- [GUIDES.md](GUIDES.md) — продвинутые темы (потоки, async, таблицы).
-- `src/functions/` — живые примеры каждой возможности.
+- [README.md](../README.md) — every function recipe.
+- [API.md](API.md) — the complete API reference.
+- [GUIDES.md](GUIDES.md) — advanced topics (threads, async, tables).
+- src/functions/ — live examples of every feature.

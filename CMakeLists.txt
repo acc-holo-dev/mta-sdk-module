@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
 
-project(ml_base VERSION 1.0.0 LANGUAGES C CXX)
+project(ml_base VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,7 +9,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Выбор рантайма для MSVC (CMP0091); на GCC/Clang не влияет.
+# Runtime selection for MSVC (CMP0091); no effect on GCC/Clang.
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
@@ -31,7 +31,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${_outdir}")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/.cache/${SDK_PLATFORM_TAG}-${SDK_ARCH_TAG}")
 
 # ---------------------------------------------------------------------------
-# Ядро модуля: все исходники, компилируются один раз.
+# Module core: every source, compiled once.
 # ---------------------------------------------------------------------------
 add_library(sdk_core OBJECT ${SDK_SOURCES})
 
@@ -58,10 +58,10 @@ endif()
 
 sdk_target_apply_baseline_options(sdk_core)
 
-# Санитайзеры (ASan/UBSan) — только для отладки, не для продакшн-модуля.
+# Sanitizers (ASan/UBSan) — for debugging only, not for the production module.
 if(SDK_SANITIZE)
   if(MSVC)
-    message(WARNING "SDK_SANITIZE поддерживается только на GCC/Clang")
+    message(WARNING "SDK_SANITIZE is supported only on GCC/Clang")
   else()
     foreach(_target sdk_core sdk_tests)
       if(TARGET ${_target})
@@ -73,7 +73,7 @@ if(SDK_SANITIZE)
 endif()
 
 # ---------------------------------------------------------------------------
-# Сам модуль: ml_base.dll / ml_base.so, который загружает MTA-сервер.
+# The module itself: ml_base.dll / ml_base.so, loaded by the MTA server.
 # ---------------------------------------------------------------------------
 add_library(sdk_base SHARED)
 target_link_libraries(sdk_base PRIVATE sdk_core mta_lua)
@@ -95,8 +95,8 @@ elseif(UNIX)
 endif()
 
 # ---------------------------------------------------------------------------
-# Embedded-тест-харнесс: гоняет все функции модуля в чистом Lua 5.1
-# с mock-менеджером — сервер MTA не нужен.
+# Embedded test harness: runs every module function in clean Lua 5.1 with a
+# mock manager — no MTA server needed.
 # ---------------------------------------------------------------------------
 if(SDK_BUILD_TESTS)
   enable_testing()
@@ -118,3 +118,6 @@ if(SDK_BUILD_TESTS)
 
   add_test(NAME sdk_tests COMMAND sdk_tests)
 endif()
+
+# Install rules + packaging for releases (see cmake/install.cmake).
+include(cmake/install.cmake)

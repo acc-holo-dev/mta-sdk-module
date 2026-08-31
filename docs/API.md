@@ -1,34 +1,34 @@
-# API-справочник — ml_base
+# API Reference — ml_base
 
-Полное описание публичного API модуля: макросы регистрации, типы аргументов,
-типы результатов и вспомогательные функции.
+Complete description of the module's public API: registration macros,
+argument types, result types and helper functions.
 
-## Макросы
+## Macros
 
 ### MTA_LUA_FUNCTION
 
 ```cpp
-MTA_LUA_FUNCTION("имя", "описание")
+MTA_LUA_FUNCTION("name", "description")
 {
-    // тело: доступен lua_State* L; вернуть количество результатов через return
+    // body: lua_State* L is available; return the number of results
 }
 ```
 
-Тело-стиль — основной. Внутри доступен `lua_State *L`. Исключения, брошенные
-в теле, перехватываются каркасом и превращаются в Lua-ошибку. Возврат —
-обычный `return <число результатов>;` (сколько значений положили на стек).
+Body style is the primary one. Inside, lua_State *L is available. Exceptions
+thrown in the body are caught by the framework and turned into Lua errors.
+Return is a plain return <result count>; (how many values were pushed).
 
 ### MTA_LUA_FUNC
 
 ```cpp
-MTA_LUA_FUNC("имя", "описание", функция-или-лямбда);
+MTA_LUA_FUNC("name", "description", function-or-lambda);
 ```
 
-Лямбда-стиль для коротких функций. Типы параметров и возврата читаются из
-сигнатуры (см. [Типы параметров](#типы-параметров-lambda-стиль)), результат
-возвращается автоматически.
+Lambda style for short functions. Parameter and return types are read from
+the signature (see [Parameter types (lambda style)](#parameter-types-lambda-style));
+the result is returned automatically.
 
-## Чтение аргументов
+## Reading arguments
 
 ### mta::lua::args
 
@@ -36,52 +36,52 @@ MTA_LUA_FUNC("имя", "описание", функция-или-лямбда);
 auto [a, b] = mta::lua::args<double, double>(L);
 ```
 
-Читает аргументы 1..N со стека по типам из списка шаблона, возвращает
-`std::tuple` (для structured bindings). Каждый тип проверяется автоматически:
-при несовпадении бросается ошибка `argument #N must be <тип>, got <факт>`.
-Лишние аргументы игнорируются, недостающие дают `…got no value`.
+Reads arguments 1..N from the stack, by the types in the template list, and
+returns a std::tuple (for structured bindings). Every type is checked
+automatically: on mismatch an error argument #N must be <type>, got <actual>
+is thrown. Extra arguments are ignored, missing ones give …got no value.
 
-### Типы аргументов
+### Argument types
 
-| Тип в args<...> | Из Lua | Примечание |
+| Type in args<...> | From Lua | Notes |
 |---|---|---|
-| `double`, `float`, `lua_Number` | число | |
-| `int`, `std::int64_t`, … | целое | с проверкой диапазона |
-| `bool` | boolean | |
-| `std::string` | строка | числа конвертируются, как в Lua |
-| `std::string_view` | строка | без копирования, живёт до конца вызова |
-| `mta::lua::Argument` | любое значение | таблицы читаются рекурсивно |
-| `mta::lua::Table` | таблица | не-таблица → ошибка |
-| `mta::async::Callback` | функция | стабильная ссылка |
-| `std::optional<T>` | T или nil/ничего | nil → nullopt |
+| double, float, lua_Number | number | |
+| int, std::int64_t, … | integer | range-checked |
+| bool | boolean | |
+| std::string | string | numbers convert like in Lua |
+| std::string_view | string | no copy, valid until the call ends |
+| mta::lua::Argument | any value | tables read recursively |
+| mta::lua::Table | table | non-table -> error |
+| mta::async::Callback | function | stable reference |
+| std::optional<T> | T or nil/nothing | nil -> nullopt |
 
-### Типы параметров (лямбда-стиль)
+### Parameter types (lambda style)
 
-Дополнительно к списку выше, в сигнатуре лямбды доступны:
+In addition to the list above, the lambda signature supports:
 
-| Тип параметра | Смысл |
+| Parameter type | Meaning |
 |---|---|
-| C++-дефолт `= значение` | опущенный аргумент → дефолт |
-| `mta::lua::rest_args` | хвостовые (вариадические) аргументы, только последним |
-| `mta::lua::context` | VM + имя ресурса; аргумента в Lua не занимает |
+| C++ default = value | omitted argument -> default |
+| mta::lua::rest_args | trailing (variadic) arguments, last only |
+| mta::lua::context | VM + resource name; consumes no Lua argument |
 
-## Типы результатов
+## Result types
 
-`mta::lua::push_results(L, ...)` принимает значения и возвращает их число:
+mta::lua::push_results(L, ...) accepts values and returns their count:
 
-| Результат | В Lua |
+| Result | In Lua |
 |---|---|
-| число / строка / bool / nullptr | одно значение (nullptr → nil) |
-| несколько значений через запятую | несколько результатов |
-| `mta::lua::Argument` | одно значение (в т.ч. таблица) |
-| `mta::lua::Table` | одна таблица |
-| `mta::lua::Arguments` (через `.push(L)`) | целый список результатов |
+| a number / string / bool / nullptr | one value (nullptr -> nil) |
+| several values separated by commas | several results |
+| mta::lua::Argument | one value (including tables) |
+| mta::lua::Table | one table |
+| mta::lua::Arguments (via .push(L)) | a whole result list |
 
 ## mta::lua::Argument
 
-Снимок одного значения Lua. Принимает любое значение; таблицы читаются
-рекурсивно до глубины `mta::lua::max_table_depth` (= 32) — защита от
-циклических ссылок.
+A snapshot of one Lua value. Accepts any value; tables are read recursively
+up to mta::lua::max_table_depth (= 32) — protection against cyclic
+references.
 
 ```cpp
 enum class Type : int { None, Nil, Boolean, LightUserData, Number, String, Table };
@@ -93,25 +93,25 @@ Argument(lua_Number);
 Argument(const char*);
 Argument(std::string);
 Argument(void*);                              // light userdata
-Argument(Table);                              // таблица
+Argument(Table);                              // table
 
-Type type() const;                            // текущий тип
+Type type() const;                            // current type
 bool as_boolean(bool def = false) const;
 lua_Number as_number(lua_Number def = 0.0) const;
 const std::string& as_string() const;
 void* as_light_userdata() const;
 bool is_table() const;
-const Table& as_table() const;                // бросает, если не таблица
+const Table& as_table() const;                // throws if not a table
 
-void read(lua_State* L, int index, int depth = 0);  // прочитать со стека
-void push(lua_State* L, int depth = 0) const;        // положить на стек
+void read(lua_State* L, int index, int depth = 0);  // read from the stack
+void push(lua_State* L, int depth = 0) const;        // push onto the stack
 
-operator== / operator!=;                      // глубокое сравнение
+operator== / operator!=;                      // deep comparison
 ```
 
 ## mta::lua::Table
 
-Снимок таблицы: целочисленная последовательная часть + строковые поля.
+A table snapshot: the integer sequence part + string fields.
 
 ```cpp
 struct Table
@@ -121,16 +121,16 @@ struct Table
 };
 ```
 
-Ключи других типов (boolean, таблицы и т.п.) при чтении отбрасываются.
-Дыры в последовательности заполняются nil.
+Keys of other types (boolean, tables, ...) are discarded when reading. Holes
+in the sequence are filled with nil.
 
 ## mta::lua::Arguments
 
-Плоский список значений — для маршалинга наборов аргументов (в т.ч. таблиц).
+A flat value list — for marshaling argument sets (tables included).
 
 ```cpp
-void read(lua_State* L, int index_begin = 1);   // прочитать все аргументы
-int push(lua_State* L) const;                   // положить все, вернуть число
+void read(lua_State* L, int index_begin = 1);   // read every argument
+int push(lua_State* L) const;                   // push all, return the count
 void append(const Arguments& other);
 bool call(lua_State* L, const char* global_name, std::string* error_out = nullptr) const;
 const Argument& at(std::size_t index) const;
@@ -149,8 +149,8 @@ Argument& push_light_userdata(void*);
 ```cpp
 struct context
 {
-    lua_State *vm;        // VM вызывающего ресурса
-    std::string resource; // имя ресурса
+    lua_State *vm;        // VM of the calling resource
+    std::string resource; // resource name
 };
 ```
 
@@ -159,49 +159,51 @@ struct context
 ```cpp
 struct rest_args
 {
-    Arguments values;     // все хвостовые аргументы
+    Arguments values;     // all trailing arguments
 };
 ```
 
-## Ошибки
+## Errors
 
 ```cpp
-[[noreturn]] void raise(std::string message);        // бросить → Lua-ошибка
-template<typename... A> [[noreturn]] void raise_error(A&&... args);  // стримится через <<
+[[noreturn]] void raise(std::string message);        // throw -> Lua error
+template<typename... A> [[noreturn]] void raise_error(A&&... args);  // streamed via <<
 ```
 
-Любое C++-исключение в функции модуля превращается в Lua-ошибку трамплином
-`mta::lua::protected_call`. Серверный процесс защищён от исключений.
+Any C++ exception inside a module function is turned into a Lua error by the
+mta::lua::protected_call trampoline. The server process is protected from
+exceptions.
 
 ## mta::async::Callback
 
-Стабильная ссылка на Lua-функцию, переживающая рестарты ресурсов. Move-only.
+A stable reference to a Lua function that survives resource restarts.
+Move-only.
 
 ```cpp
-static Callback from_stack(lua_State* L, int index); // привязать функцию (бросает на не-функции)
+static Callback from_stack(lua_State* L, int index); // bind a function (throws on non-function)
 bool valid() const;
-const std::string& resource() const;                 // имя ресурса-владельца
-bool call(const mta::lua::Arguments&) const;         // вызвать; false, если ресурс мёртв/ошибка
+const std::string& resource() const;                 // owning resource name
+bool call(const mta::lua::Arguments&) const;         // call; false if the resource is dead/error
 ```
 
 ## mta::async::Scheduler
 
-Фоновые задачи с доставкой результатов в главный поток (DoPulse).
+Background tasks with results delivered on the main thread (DoPulse).
 
 ```cpp
 static Scheduler& instance();
-void start();      // поднять воркеров (зовится при инициализации)
-void stop();       // остановить воркеров и сбросить очереди (shutdown)
-void pump();       // главный поток: раздать результаты, сработать таймеры
+void start();      // spawn workers (called at initialization)
+void stop();       // stop workers and clear queues (shutdown)
+void pump();       // main thread: dispatch results, fire timers
 
 void post_task(std::function<Arguments()> work,
                std::function<void(const Arguments&, const char*)> completion);
-// work — на воркере (БЕЗ Lua!), completion — на главном потоке;
-// error == nullptr при успехе.
+// work — on a worker (NO Lua!), completion — on the main thread;
+// error == nullptr on success.
 
 std::uint64_t post_timer(std::string resource, int delay_ms, int repeat_count,
                          std::function<void(std::uint64_t)> completion);
-// completion(tick) каждые delay_ms; repeat_count раз (0 = бесконечно).
+// completion(tick) every delay_ms, repeat_count times (0 = forever).
 
 bool cancel_timer(std::uint64_t id);
 void handle_resource_stopped(const std::string& resource);
@@ -210,75 +212,75 @@ bool running() const;
 
 ## mta::resources::Store<T>
 
-Пер-ресурсные данные с автоочисткой при остановке ресурса.
+Per-resource data with automatic cleanup when the resource stops.
 
 ```cpp
 template<typename T> class Store
 {
-    T& for_state(lua_State* L);               // данные вызывающего ресурса
-    T* try_find(const std::string& resource); // или nullptr
-    // on_resource_stopped / on_all_released — очистка автоматическая
+    T& for_state(lua_State* L);               // data of the calling resource
+    T* try_find(const std::string& resource); // or nullptr
+    // on_resource_stopped / on_all_released — cleanup is automatic
 };
 ```
 
 ## mta::log
 
-Уровни (по возрастанию): `Debug < Info < Warn < Error < Off`. Сообщение
-печатается, если его уровень >= текущего. По умолчанию `Info`.
+Levels (ascending): Debug < Info < Warn < Error < Off. A message is printed
+when its level >= the current one. Default is Info.
 
 ```cpp
 enum class Level { Debug, Info, Warn, Error, Off };
 void set_level(Level);
 Level get_level();
 
-template<typename... A> void debug(lua_State*, A&&...);  // привязано к ресурсу
-template<typename... A> void info(A&&...);    // консоль сервера
-template<typename... A> void warn(A&&...);    // консоль сервера (предупреждение)
-template<typename... A> void error(A&&...);   // консоль сервера (ошибка)
+template<typename... A> void debug(lua_State*, A&&...);  // bound to the resource
+template<typename... A> void info(A&&...);    // server console
+template<typename... A> void warn(A&&...);    // server console (warning)
+template<typename... A> void error(A&&...);   // server console (error)
 ```
 
 ## mta::events
 
-Триггер MTA-событий: модуль «бросает» событие в Lua-скрипты ресурса через
-штатный `triggerEvent` (источник — `root`).
+MTA event trigger: the module "throws" an event into the resource's Lua
+scripts via the standard triggerEvent (source is root).
 
 ```cpp
 bool trigger(lua_State* L, const char* event_name, const mta::lua::Arguments& args);
-// false, если triggerEvent недоступен или вызов не удался.
+// false if triggerEvent is unavailable or the call failed.
 ```
 
-## mta::lua — хелперы таблиц
+## mta::lua — table helpers
 
 ```cpp
-// Конвертация Argument → C++-тип (бросает при несовпадении).
+// Argument -> C++-type conversion (throws on mismatch).
 template<typename T> T convert(const Argument&);
 
-// Чтение поля по строковому ключу.
+// Read a field by string key.
 template<typename T> T get_field(const Table&, const char* key, T default_value);
-template<typename T> T get_field(const Table&, const char* key);  // бросает, если нет
+template<typename T> T get_field(const Table&, const char* key);  // throws if absent
 
-// Запись (или перезапись) поля.
+// Write (or overwrite) a field.
 void set_field(Table&, const char* key, Argument value);
 ```
 
 ## mta::userdata::Registry<T>
 
-Объекты с методами и `__gc` (деструктором).
+Objects with methods and a __gc (destructor).
 
 ```cpp
 template<typename T> class Registry
 {
     using Registrar = void (*)(lua_State*);
-    static void set_methods(Registrar);   // один раз на процесс
-    static void ensure(lua_State*);       // метатаблица + методы в этом VM
-    static T* create(lua_State*, T value); // userdata на стеке, возвращает T*
-    static T* check(lua_State*, int index); // проверка userdata (бросает)
+    static void set_methods(Registrar);   // once per process
+    static void ensure(lua_State*);       // metatable + methods in this VM
+    static T* create(lua_State*, T value); // userdata on the stack, returns T*
+    static T* check(lua_State*, int index); // validate userdata (throws)
     template<std::size_t Tag, typename F>
     static void add_method(lua_State*, const char* name, F fn);
 };
 
-// Регистрация метода: MTA_METHOD(Type, "имя", лямбда);
-// Лямбда принимает self (Type&) первым параметром.
+// Register a method: MTA_METHOD(Type, "name", lambda);
+// The lambda takes self (Type&) as its first parameter.
 ```
 
 ## mta::module

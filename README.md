@@ -3,72 +3,76 @@
 [![CI](https://github.com/acc-holo-dev/mta-sdk-module/actions/workflows/ci.yml/badge.svg)](https://github.com/acc-holo-dev/mta-sdk-module/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Крепкая основа для серверного модуля [MTA:SA](https://multitheftauto.com):
-динамическая библиотека (`ml_base.dll` / `ml_base.so`), которую загружает
-MTA-сервер и которая добавляет в Lua собственные нативные функции.
+A solid foundation for [MTA:SA](https://multitheftauto.com) server modules:
+a dynamic library (ml_base.dll / ml_base.so) that the MTA server loads and
+that adds native Lua functions of its own.
 
-Функции пишутся **обычным C++ с телом**, аргументы читаются по типам сами —
-никаких ручных `check_number`, индексов и «это число, это строка»:
+Functions are written in **plain C++ with a body**; arguments are read by
+type automatically — no manual check_number, no indices, no "this is a
+number, this is a string":
 
 ```cpp
 // src/functions/basics/my_sum.cpp
 #include "registry/registry.hpp"
 
-MTA_LUA_FUNCTION("my_sum", "Складывает два числа.")
+MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 {
-    auto [a, b] = mta::lua::args<double, double>(L);   // типы сами, проверки сами
-    return mta::lua::push_results(L, a + b);           // возврат тоже авто
+    auto [a, b] = mta::lua::args<double, double>(L);   // types and checks automatic
+    return mta::lua::push_results(L, a + b);           // return is automatic too
 }
 ```
 
-Пересобрал — `my_sum` уже видна во всех ресурсах сервера. Новые .cpp
-подхватываются автоматически, регистрация — тоже.
+Rebuild and my_sum is available in every server resource. New .cpp files are
+picked up automatically, and so is their registration.
 
 ---
 
-## Содержание
+## Table of contents
 
-- [Архитектура](#архитектура)
-- [Сборка](#сборка)
-- [Установка на сервер](#установка-на-сервер)
-- [Написание функций](#написание-функций)
-- [Типы аргументов и результатов](#типы-аргументов-и-результатов)
-- [Правила безопасности](#правила-безопасности)
-- [Тесты](#тесты)
+- [Architecture](#architecture)
+- [Building](#building)
+- [Server installation](#server-installation)
+- [Writing functions](#writing-functions)
+- [Argument and result types](#argument-and-result-types)
+- [Safety rules](#safety-rules)
+- [Testing](#testing)
 
-## Архитектура
+## Architecture
 
 ```
 src/
-├── module/       # контракт MTA: mta::module — init, pulse, resource hooks
-├── lua/          # работа со стеком Lua: mta::lua
-│   ├── bind.hpp        👉 биндер: args<...>, pull/push, границы исключений
-│   ├── argument.hpp    #   Argument: значение Lua + таблицы
-│   ├── arguments.hpp   #   Arguments: список значений
-│   └── protect.hpp     #   исключения → Lua-ошибки
-├── registry/     # реестр + макросы MTA_LUA_FUNCTION / MTA_LUA_FUNC
-├── runtime/      # движок: scheduler, callback, resources, logging
-└── functions/    👉 ЕДИНСТВЕННАЯ папка, которую трогаешь ты
+├── module/       # MTA contract: mta::module — init, pulse, resource hooks
+├── lua/          # Lua stack helpers: mta::lua
+│   ├── bind.hpp        👉 binder: args<...>, pull/push, exception boundary
+│   ├── argument.hpp    #   Argument: one Lua value + tables
+│   ├── arguments.hpp   #   Arguments: a list of values
+│   └── protect.hpp     #   exceptions -> Lua errors
+├── registry/     # registry + MTA_LUA_FUNCTION / MTA_LUA_FUNC macros
+├── runtime/      # engine: scheduler, callback, resources, logging
+└── functions/    👉 THE ONLY folder you touch
     ├── basics/   # sample_add, sample_echo, sample_greet, sample_tag,
     │            #   sample_minmax, sample_range
-    ├── tables/   # sample_table_stats
+    ├── tables/   # sample_table_stats, sample_table_get/set
     ├── info/     # sample_version, module_functions
     ├── async/    # sample_async_add, sample_timer(+cancel)
-    └── raw/      # sample_stack_dump — прямой доступ к стеку
+    ├── events/   # sample_trigger_event
+    ├── objects/  # counter_create — userdata methods example
+    ├── state/    # sample_session_hit — per-resource state
+    └── raw/      # sample_stack_dump — direct stack access
 
-tests/            # embedded-Lua харнесс + скрипты
-vendor/           # mta-sdk (заголовки SDK) + lua (Lua 5.1.5)
-cmake/            # инфраструктура сборки
+tests/            # embedded-Lua harness + scripts
+vendor/           # mta-sdk (SDK headers) + lua (Lua 5.1.5)
+cmake/            # build infrastructure
 ```
 
-Свои функции раскладывай по доменам внутри `functions/` — например
-`functions/crypto/`, `functions/http/`. Домен создаётся простым добавлением
-папки с .cpp: всё дерево `src/**/*.cpp` собирается автоматически.
+Put your own functions into domain folders inside functions/ — for example
+functions/crypto/ or functions/http/. A domain is created by simply adding a
+folder with a .cpp: the whole src/**/*.cpp tree is built automatically.
 
-## Сборка
+## Building
 
-Требуется CMake ≥ 3.27, Ninja и компилятор с C++20 и std::thread
-(MinGW-w64 posix-threads, MSVC 2019+ или GCC/Clang на Linux).
+Requirements: CMake ≥ 3.27, Ninja and a compiler with C++20 and std::thread
+(MinGW-w64 posix-threads, MSVC 2019+ or GCC/Clang on Linux).
 
 ```bash
 # Windows (MinGW-w64)
@@ -81,59 +85,59 @@ cmake --preset win-msvc && cmake --build --preset win-msvc
 cmake --preset linux-gcc && cmake --build --preset linux-gcc
 ```
 
-Артефакт: `build/<пресет>/module/<платформа>-<арх>/ml_base.dll`
-(например `module/win-x64/ml_base.dll`), рантайм MinGW линкуется статически.
+Artifact: `build/<preset>/module/<platform>-<arch>/ml_base.dll`
+(e.g. `module/win-x64/ml_base.dll`); the MinGW runtime is linked statically.
 
-## Установка на сервер
+## Server installation
 
-1. Скопируйте `ml_base.dll` в `mods/deathmatch/modules/` сервера.
-2. В `mtaserver.conf` добавьте `<module src="ml_base"/>`.
-3. Перезапустите сервер: в консоли появится
-   `MODULE: Loaded "Base Module" (1.00) by "anon"`.
+1. Copy ml_base.dll into the server's mods/deathmatch/modules/.
+2. Add <module src="ml_base"/> to mtaserver.conf.
+3. Restart the server; the console should show
+   MODULE: Loaded "Base Module" (1.10) by "anon".
 
-Битность модуля = битность сервера (современный MTA — x64).
+Module bitness = server bitness (modern MTA is x64).
 
-## Написание функций
+## Writing functions
 
-### Простая функция
+### A simple function
 
 ```cpp
 #include "registry/registry.hpp"
 
-MTA_LUA_FUNCTION("my_sum", "Складывает два числа.")
+MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 {
     auto [a, b] = mta::lua::args<double, double>(L);
     return mta::lua::push_results(L, a + b);
 }
 ```
 
-`mta::lua::args<...>(L)` читает аргументы по порядку: тип каждого проверяется
-автоматически, при неверном типе Lua-скриптер получит
-`argument #N must be <тип>, got <факт>`. Лишние аргументы игнорируются,
-недостающие дают `…got no value`.
+mta::lua::args<...>(L) reads arguments in order: each type is checked
+automatically and a wrong type gives the Lua scripter
+argument #N must be <type>, got <actual>. Extra arguments are ignored,
+missing ones give …got no value.
 
-### Типы и несколько результатов
+### Types and several results
 
 ```cpp
-MTA_LUA_FUNCTION("my_div", "Делит два числа.")
+MTA_LUA_FUNCTION("my_div", "Divides two numbers.")
 {
     auto [a, b] = mta::lua::args<double, double>(L);
     if (b == 0.0)
     {
-        mta::lua::raise_error("my_div: деление на ноль");  // → ошибка Lua
+        mta::lua::raise_error("my_div: division by zero");  // -> Lua error
     }
     return mta::lua::push_results(L, a / b);
 }
 
-// несколько результатов за вызов:
-MTA_LUA_FUNCTION("my_minmax", "Минимум и максимум.")
+// several results per call:
+MTA_LUA_FUNCTION("my_minmax", "Minimum and maximum.")
 {
     auto [a, b] = mta::lua::args<double, double>(L);
     return mta::lua::push_results(L, std::min(a, b), std::max(a, b));
 }
 
-// переменное число результатов — через Arguments:
-MTA_LUA_FUNCTION("my_range", "Числа от from до to.")
+// a variable number of results via Arguments:
+MTA_LUA_FUNCTION("my_range", "Numbers from 'from' to 'to'.")
 {
     auto [from, to] = mta::lua::args<std::int64_t, std::int64_t>(L);
     mta::lua::Arguments result;
@@ -142,23 +146,23 @@ MTA_LUA_FUNCTION("my_range", "Числа от from до to.")
 }
 ```
 
-### Необязательные аргументы
+### Optional arguments
 
 ```cpp
-// std::optional<T>: nil или отсутствие → nullopt, дефолт через value_or.
-MTA_LUA_FUNCTION("my_greet", "Приветствие.")
+// std::optional<T>: nil or absence -> nullopt, default via value_or.
+MTA_LUA_FUNCTION("my_greet", "Greets a name.")
 {
     auto [name, greeting] = mta::lua::args<std::string, std::optional<std::string>>(L);
-    return mta::lua::push_results(L, greeting.value_or("привет") + ", " + name);
+    return mta::lua::push_results(L, greeting.value_or("hello") + ", " + name);
 }
 ```
 
-### Таблицы
+### Tables
 
 ```cpp
-MTA_LUA_FUNCTION("my_table_demo", "Пример работы с таблицей.")
+MTA_LUA_FUNCTION("my_table_demo", "Table example.")
 {
-    auto [table] = mta::lua::args<mta::lua::Table>(L);   // не-таблица → ошибка
+    auto [table] = mta::lua::args<mta::lua::Table>(L);   // non-table -> error
     double sum = 0.0;
     for (const auto &value : table.array)
     {
@@ -174,13 +178,12 @@ MTA_LUA_FUNCTION("my_table_demo", "Пример работы с таблицей
 }
 ```
 
-`mta::lua::Argument` принимает ЛЮБОЕ значение (таблицы рекурсивно, до 32
-уровней).
+mta::lua::Argument accepts ANY value (tables recursively, up to 32 levels).
 
-### Вариадика (неизвестное число аргументов)
+### Variadics (unknown argument count)
 
 ```cpp
-MTA_LUA_FUNCTION("my_echo", "Возвращает все аргументы обратно.")
+MTA_LUA_FUNCTION("my_echo", "Returns every argument back.")
 {
     mta::lua::Arguments arguments;
     arguments.read(L);
@@ -189,7 +192,7 @@ MTA_LUA_FUNCTION("my_echo", "Возвращает все аргументы об
 }
 ```
 
-### Асинхронная функция и таймеры
+### Async function and timers
 
 ```cpp
 #include <memory>
@@ -199,130 +202,135 @@ MTA_LUA_FUNCTION("my_echo", "Возвращает все аргументы об
 #include "runtime/logging.hpp"
 #include "runtime/scheduler.hpp"
 
-MTA_LUA_FUNCTION("my_async", "Считает в фоне; callback(result) на DoPulse.")
+MTA_LUA_FUNCTION("my_async", "Computes in the background; callback(result) runs on DoPulse.")
 {
     auto [value, callback] = mta::lua::args<double, mta::async::Callback>(L);
     auto cb = std::make_shared<mta::async::Callback>(std::move(callback));
 
     mta::async::Scheduler::instance().post_task(
-        [value] {                       // фоновый поток: БЕЗ Lua!
+        [value] {                       // background thread: NO Lua!
             mta::lua::Arguments result;
             result.push_number(heavy(value));
             return result;
         },
         [cb](const mta::lua::Arguments &result, const char *error) {
             if (error != nullptr) { mta::log::error("my_async: ", error); return; }
-            cb->call(result);           // главный поток: безопасно
+            cb->call(result);           // main thread: safe
         });
 
     return mta::lua::push_results(L, true);
 }
 ```
 
-`Callback` — тип параметра: привязка Lua-функции, переживание рестартов
-ресурса и авто-освобождение делаются каркасом. Таймеры — см.
-`src/functions/async/timers.cpp` (`sample_timer`/`sample_timer_cancel`).
-Callback move-only — при захвате в completion оборачивай в `make_shared`.
+Callback is a parameter type: binding the Lua function, surviving resource
+restarts and auto-release are handled by the framework. Timers — see
+src/functions/async/timers.cpp (sample_timer/sample_timer_cancel). Callback
+is move-only — wrap it in make_shared when capturing into a completion.
 
-### Пер-ресурсное состояние
+### Per-resource state
 
 ```cpp
 namespace
 {
 struct MySession { std::string token; int requests = 0; };
-mta::resources::Store<MySession> g_sessions;   // статик в .cpp
+mta::resources::Store<MySession> g_sessions;   // one static per .cpp
 }
 
-MTA_LUA_FUNCTION("my_session_hit", "Счётчик обращений ресурса.")
+MTA_LUA_FUNCTION("my_session_hit", "Hit counter of the resource.")
 {
-    MySession &session = g_sessions.for_state(L);   // VM доступен прямо в теле
+    MySession &session = g_sessions.for_state(L);   // the VM is available in the body
     ++session.requests;
     return mta::lua::push_results(L, static_cast<lua_Number>(session.requests));
 }
 ```
 
-Запись стирается автоматически при остановке ресурса.
+The record is erased automatically when the resource stops.
 
-### Логирование
+### Logging
 
 ```cpp
-mta::log::info("кэш загружен: ", count, " записей");
-mta::log::error("загрузка не удалась: ", code);
-mta::log::debug(L, "вызвано с ", n, " аргументами");   // привязано к ресурсу
+mta::log::info("cache loaded: ", count, " entries");
+mta::log::error("load failed: ", code);
+mta::log::debug(L, "called with ", n, " arguments");   // bound to the resource
 ```
 
-### Прямой доступ к стеку (экзотика)
+### Direct stack access (exotic)
 
-В теле функции доступен `lua_State *L` — можно делать что угодно напрямую:
+The function body has lua_State *L available — you can do anything with the
+stack directly:
 
 ```cpp
-MTA_LUA_FUNCTION("my_raw", "Описание.")
+MTA_LUA_FUNCTION("my_raw", "Description.")
 {
-    return lua_gettop(L);   // любой низкоуровневый код; исключения ловит каркас
+    return lua_gettop(L);   // any low-level code; the framework catches exceptions
 }
 ```
 
-Живой пример — `src/functions/raw/stack_dump.cpp`.
+A live example is src/functions/raw/stack_dump.cpp.
 
-### Лямбда-стиль (короткие однострочники)
+### Lambda style (short one-liners)
 
-Для однострочных функций есть второй макрос — `MTA_LUA_FUNC` с лямбдой:
-типы читаются из сигнатуры, возврат автоматический:
+For one-liners there is a second macro, MTA_LUA_FUNC with a lambda: types
+are read from the signature and the return is automatic:
 
 ```cpp
-MTA_LUA_FUNC("my_sum", "Складывает два числа.",
+MTA_LUA_FUNC("my_sum", "Adds two numbers.",
     [](double a, double b) { return a + b; });
 ```
 
-## Типы аргументов и результатов
+## Argument and result types
 
-| Аргумент в `args<...>` | Из Lua |
+| Argument in args<...> | From Lua |
 |---|---|
-| `double`, `float` | число |
-| `int`, `int64_t`, … | целое (с проверкой диапазона) |
-| `bool` | boolean |
-| `std::string` / `std::string_view` | строка |
-| `mta::lua::Argument` | любое значение (таблицы рекурсивно) |
-| `mta::lua::Table` | таблица |
-| `mta::async::Callback` | функция (стабильная ссылка) |
-| `std::optional<T>` | T или nil/ничего |
+| double, float | number |
+| int, int64_t, … | integer (range-checked) |
+| bool | boolean |
+| std::string / std::string_view | string |
+| mta::lua::Argument | any value (tables recursively) |
+| mta::lua::Table | table |
+| mta::async::Callback | function (stable reference) |
+| std::optional<T> | T or nil/nothing |
 
-| Результат в `push_results` | В Lua |
+| Result in push_results | In Lua |
 |---|---|
-| значение (число/строка/bool/таблица/…) | один результат |
-| несколько значений через запятую | несколько результатов |
-| `mta::lua::Arguments` (+ `push`) | целый список результатов |
-| `nullptr` | nil |
+| a value (number/string/bool/table/…) | one result |
+| several values separated by commas | several results |
+| mta::lua::Arguments (+ push) | a whole result list |
+| nullptr | nil |
 
-Неправильный тип аргумента превращается в понятную Lua-ошибку вида
-`argument #1 must be a number, got string` — прямо из `args<...>`, писать
-проверки руками не нужно.
+A wrong argument type becomes a readable Lua error like
+argument #1 must be a number, got string — straight from args<...>;
+no manual checks are needed.
 
-## Правила безопасности
+## Safety rules
 
-1. **Никогда не храните `lua_State *` между вызовами.** VM ресурса умирает при
-   его остановке. Для отложенных вызовов — `mta::async::Callback`; для данных —
-   `mta::resources::Store`.
-2. **Lua трогаем только в главном потоке.** Из воркеров — чистый C++,
-   результаты через `post_task` → `DoPulse`.
-3. **Функции глобальны для всех ресурсов** — давайте уникальные имена.
-4. **Исключения не покидают модуль**: макросы переводят всё в Lua-ошибки;
-   стек C++ раскручивается корректно.
-5. **Битность модуля = битность сервера.**
+1. Never store lua_State * between calls. A resource's VM dies when the
+   resource stops. For deferred calls use mta::async::Callback; for data use
+   mta::resources::Store.
+2. Touch Lua only on the main thread. From workers — pure C++, results via
+   post_task -> DoPulse.
+3. Functions are global for every resource — give them unique names.
+4. Exceptions never leave the module: the macros translate everything into
+   Lua errors; the C++ stack unwinds correctly.
+5. Module bitness = server bitness.
 
-## Тесты
+## Testing
 
 ```bash
 cmake --build --preset win-mingw --target sdk_tests
-ctest --preset win-mingw            # или запустить sdk_tests.exe напрямую
+ctest --preset win-mingw            # or run sdk_tests.exe directly
 ```
 
-Харнесс (`tests/harness.cpp`) поднимает чистый Lua 5.1, ставит mock-менеджер
-и гоняет `tests/scripts/*.lua`: базовые функции, таблицы, асинхронность,
-таймеры и все фичи биндера (optional, несколько результатов, вариадика,
-прямой стек). Добавляй свои скрипты — подхватываются автоматически.
+The harness (tests/harness.cpp) starts a clean Lua 5.1, installs a mock
+manager and runs tests/scripts/*.lua: basic functions, tables, async,
+timers and every binder feature (optional, multiple results, variadics,
+direct stack). Add your own scripts — they are picked up automatically.
 
----
+## CI and releases
 
-Имя модуля и автор — в `src/module/module.cpp` (`module_details`),
-имя DLL — в `CMakeLists.txt` (`OUTPUT_NAME`).
+GitHub Actions builds and tests the module on Linux (GCC) and Windows
+(MinGW-w64 and MSVC). Pushing a tag like v1.1.0 builds .dll/.so artifacts
+and attaches them to a GitHub Release — see .github/workflows/.
+
+The module name and author live in src/module/module.cpp (module_details),
+the DLL name in CMakeLists.txt (OUTPUT_NAME).
