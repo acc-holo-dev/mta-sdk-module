@@ -1,5 +1,8 @@
 # MTA:SA Lua Module — ml_base
 
+[![CI](https://github.com/acc-holo-dev/mta-sdk-module/actions/workflows/ci.yml/badge.svg)](https://github.com/acc-holo-dev/mta-sdk-module/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Крепкая основа для серверного модуля [MTA:SA](https://multitheftauto.com):
 динамическая библиотека (`ml_base.dll` / `ml_base.so`), которую загружает
 MTA-сервер и которая добавляет в Lua собственные нативные функции.

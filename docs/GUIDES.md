@@ -200,3 +200,89 @@ MTA_LUA_FUNCTION("my_dump", "Типы всех аргументов.")
 ```
 
 Исключения и тут ловятся каркасом. Не храните `L` между вызовами.
+
+## 7. Объекты (userdata/метатаблицы)
+
+Объекты с методами и деструктором — как в библиотеках sockets/mysql.
+
+```cpp
+#include "lua/userdata.hpp"
+#include "registry/registry.hpp"
+
+namespace
+{
+struct Counter { double value = 0; };
+
+void register_counter_methods(lua_State *L)
+{
+    MTA_METHOD(Counter, "get", [](Counter &self) { return self.value; });
+    MTA_METHOD(Counter, "set", [](Counter &self, double v) { self.value = v; });
+}
+
+// Один раз на процесс: привязываем регистратор методов к типу.
+const bool counter_registered = [] {
+    mta::userdata::Registry<Counter>::set_methods(&register_counter_methods);
+    return true;
+}();
+} // namespace
+
+MTA_LUA_FUNCTION("counter_create", "Создаёт счётчик.")
+{
+    auto [value] = mta::lua::args<double>(L);
+    mta::userdata::Registry<Counter>::create(L, Counter{value});
+    return 1;
+}
+```
+
+```lua
+local c = counter_create(42)
+c:get()   -- 42
+c:set(100)
+c = nil   -- __gc вызовет ~Counter()
+```
+
+Важные детали:
+
+- Методы регистрируются **на каждый VM** (у каждого ресурса свой `lua_State` и
+  своя метатаблица) — `Registry` делает это сам через `set_methods`.
+- `__gc` вызывает деструктор `~T()` при сборке мусора — память не течёт.
+- `Registry<T>::check(L, index)` достаёт `T*` из userdata с проверкой типа.
+- Живой пример — `src/functions/objects/counter.cpp`.
+
+## 8. События (модуль → Lua)
+
+Модуль может «бросить» событие в скрипты ресурса через штатный `triggerEvent`:
+
+```cpp
+MTA_LUA_FUNCTION("my_notify", "Шлёт событие.")
+{
+    auto [message] = mta::lua::args<std::string>(L);
+
+    mta::lua::Arguments args;
+    args.push_string(message);
+    mta::events::trigger(L, "onMyNotify", args);
+
+    return mta::lua::push_results(L, true);
+}
+```
+
+```lua
+addEventHandler("onMyNotify", root, function(msg)
+    outputChatBox("Модуль прислал: " .. msg)
+end)
+```
+
+Источник события — глобальный `root`. Вызывать только из главного потока.
+
+## 9. Уровни логирования
+
+```cpp
+mta::log::set_level(mta::log::Level::Debug);  // показать всё
+mta::log::debug(L, "деталь: ", value);        // видно только на Debug
+mta::log::info("обычное сообщение");
+mta::log::warn("подозрительно: ", x);
+mta::log::error("ошибка: ", reason);
+```
+
+По умолчанию уровень `Info`: `debug` скрыт, `info`/`warn`/`error` видны.
+`set_level(Level::Off)` отключает всё, кроме `error`.

@@ -9,6 +9,8 @@ namespace mta::log
 {
 namespace
 {
+Level g_level = Level::Info;
+
 // Вывод, пока менеджер модуля не подключён (тест-харнесс, ранние ошибки).
 void fallback_write(std::FILE *target, std::string_view message)
 {
@@ -18,12 +20,33 @@ void fallback_write(std::FILE *target, std::string_view message)
 }
 } // namespace
 
+void set_level(Level level) noexcept
+{
+    g_level = level;
+}
+
+Level get_level() noexcept
+{
+    return g_level;
+}
+
 void write_info(std::string_view message)
 {
     if (auto *manager = mta::module::manager())
     {
         const std::string text(message);
         manager->Printf("%s", text.c_str());
+        return;
+    }
+    fallback_write(stdout, message);
+}
+
+void write_warn(std::string_view message)
+{
+    if (auto *manager = mta::module::manager())
+    {
+        const std::string text(message);
+        manager->Printf("[WARN] %s", text.c_str());
         return;
     }
     fallback_write(stdout, message);

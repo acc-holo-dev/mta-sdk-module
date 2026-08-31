@@ -223,10 +223,62 @@ template<typename T> class Store
 
 ## mta::log
 
+Уровни (по возрастанию): `Debug < Info < Warn < Error < Off`. Сообщение
+печатается, если его уровень >= текущего. По умолчанию `Info`.
+
 ```cpp
-template<typename... A> void info(A&&...);    // консоль сервера
-template<typename... A> void error(A&&...);   // консоль сервера (ошибка)
+enum class Level { Debug, Info, Warn, Error, Off };
+void set_level(Level);
+Level get_level();
+
 template<typename... A> void debug(lua_State*, A&&...);  // привязано к ресурсу
+template<typename... A> void info(A&&...);    // консоль сервера
+template<typename... A> void warn(A&&...);    // консоль сервера (предупреждение)
+template<typename... A> void error(A&&...);   // консоль сервера (ошибка)
+```
+
+## mta::events
+
+Триггер MTA-событий: модуль «бросает» событие в Lua-скрипты ресурса через
+штатный `triggerEvent` (источник — `root`).
+
+```cpp
+bool trigger(lua_State* L, const char* event_name, const mta::lua::Arguments& args);
+// false, если triggerEvent недоступен или вызов не удался.
+```
+
+## mta::lua — хелперы таблиц
+
+```cpp
+// Конвертация Argument → C++-тип (бросает при несовпадении).
+template<typename T> T convert(const Argument&);
+
+// Чтение поля по строковому ключу.
+template<typename T> T get_field(const Table&, const char* key, T default_value);
+template<typename T> T get_field(const Table&, const char* key);  // бросает, если нет
+
+// Запись (или перезапись) поля.
+void set_field(Table&, const char* key, Argument value);
+```
+
+## mta::userdata::Registry<T>
+
+Объекты с методами и `__gc` (деструктором).
+
+```cpp
+template<typename T> class Registry
+{
+    using Registrar = void (*)(lua_State*);
+    static void set_methods(Registrar);   // один раз на процесс
+    static void ensure(lua_State*);       // метатаблица + методы в этом VM
+    static T* create(lua_State*, T value); // userdata на стеке, возвращает T*
+    static T* check(lua_State*, int index); // проверка userdata (бросает)
+    template<std::size_t Tag, typename F>
+    static void add_method(lua_State*, const char* name, F fn);
+};
+
+// Регистрация метода: MTA_METHOD(Type, "имя", лямбда);
+// Лямбда принимает self (Type&) первым параметром.
 ```
 
 ## mta::module

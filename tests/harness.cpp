@@ -173,6 +173,21 @@ int test_pump(lua_State *lua_vm)
     mta::module::pulse();
     return 0;
 }
+
+// Имитирует остановку ресурса: ResourceStopping + ResourceStopped.
+int test_resource_stop(lua_State *lua_vm)
+{
+    mta::module::resource_stopping(lua_vm);
+    mta::module::resource_stopped(lua_vm);
+    return 0;
+}
+
+// Имитирует рестарт ресурса: повторная регистрация функций в VM.
+int test_resource_start(lua_State *lua_vm)
+{
+    mta::module::register_functions(lua_vm);
+    return 0;
+}
 } // namespace
 
 int main()
@@ -197,6 +212,8 @@ int main()
 
     lua_register(lua_vm, "test_assert", test_assert);
     lua_register(lua_vm, "test_pump", test_pump);
+    lua_register(lua_vm, "test_resource_stop", test_resource_stop);
+    lua_register(lua_vm, "test_resource_start", test_resource_start);
 
     std::printf("harness: зарегистрировано функций модуля: %zu\n", manager.registered_names.size());
 
