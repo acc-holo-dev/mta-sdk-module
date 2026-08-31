@@ -14,6 +14,8 @@ install(FILES
 )
 
 # CPack: produce a ZIP with the module binary, README and LICENSE.
+# The package lands in build/<preset>/package/ regardless of where cpack runs.
+set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/package")
 set(CPACK_PACKAGE_NAME "ml_base")
 set(CPACK_PACKAGE_VENDOR "HoloDev")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")

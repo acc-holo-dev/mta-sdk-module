@@ -11,6 +11,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Regression tests: timer callbacks may now create and cancel timers while
   the scheduler dispatches the due timers (locks in the pump() safety fix).
 
+### Added
+
+- The Release workflow now also builds and attaches CPack ZIP packages
+  (module + README + LICENSE) for both platforms.
+- CONTRIBUTING.md and Dependabot (github-actions) configuration.
+
 ### Changed
 
 - CI no longer runs on tag pushes (the Release workflow covers tags) and

@@ -50,12 +50,16 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
 
+      - name: Package ZIP
+        run: cpack -G ZIP --config build/${{ matrix.preset }}/CPackConfig.cmake
+
       - name: Collect artifacts
         shell: bash
         run: |
           set -e
           mkdir -p dist
           cp build/${{ matrix.preset }}/module/*/ml_base.* dist/
+          cp build/${{ matrix.preset }}/package/*.zip dist/
           cp LICENSE dist/
           ls -la dist/
 
