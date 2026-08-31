@@ -20,7 +20,11 @@ constexpr int worker_count = 3;
 constexpr int minimum_timer_delay_ms = 1;
 
 using clock_type = std::chrono::steady_clock;
+} // namespace
 
+// Implementation-only types kept OUT of the anonymous namespace: with
+// -Werror=subobject-linkage, Scheduler::Impl (external linkage) may not hold
+// fields of internal-linkage types (GCC 13+, notably under unity builds).
 struct Task
 {
     std::function<mta::lua::Arguments()> work;
@@ -44,7 +48,6 @@ struct Timer
     std::uint64_t fired = 0;
     std::function<void(std::uint64_t)> completion;
 };
-} // namespace
 
 struct Scheduler::Impl
 {
