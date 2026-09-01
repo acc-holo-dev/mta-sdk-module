@@ -26,9 +26,7 @@
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl",
-        "SDK_LTO": "ON",
-        "SDK_UNITY": "ON"
+        "CMAKE_CXX_COMPILER": "cl"
       }
     },
     {
@@ -41,9 +39,7 @@
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++",
-        "SDK_LTO": "ON",
-        "SDK_UNITY": "ON"
+        "CMAKE_CXX_COMPILER": "g++"
       }
     },
     {
@@ -56,9 +52,7 @@
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++",
-        "SDK_LTO": "ON",
-        "SDK_UNITY": "ON"
+        "CMAKE_CXX_COMPILER": "g++"
       }
     }
   ],

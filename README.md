@@ -13,8 +13,8 @@ type automatically — no manual check_number, no indices, no "this is a
 number, this is a string":
 
 ```cpp
-// src/functions/basics/my_sum.cpp
-#include "registry/registry.hpp"
+// source/functions/basics/my_sum.cpp
+#include "sdk/registry/registry.hpp"
 
 MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 {
@@ -40,50 +40,89 @@ picked up automatically, and so is their registration.
 - [Testing](#testing)
 
 > For the full design — layers, data flows, threading rules — see
-> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+> [other/documents/ARCHITECTURE.md](other/documents/ARCHITECTURE.md).
 
 ## Architecture
 
 ```
-src/
-├── module/       # MTA contract: mta::module — init, pulse, resource hooks
-├── lua/          # Lua stack helpers: mta::lua
-│   ├── bind.hpp        👉 binder: args<...>, pull/push, exception boundary
-│   ├── argument.hpp    #   Argument: one Lua value + tables
-│   ├── arguments.hpp   #   Arguments: a list of values
-│   └── protect.hpp     #   exceptions -> Lua errors
-├── registry/     # registry + MTA_LUA_FUNCTION / MTA_LUA_FUNC macros
-├── runtime/      # engine: scheduler, callback, resources, logging
-└── functions/    👉 THE ONLY folder you touch
-    ├── basics/   # sample_add, sample_echo, sample_greet, sample_tag,
-    │            #   sample_minmax, sample_range
-    ├── tables/   # sample_table_stats, sample_table_get/set
-    ├── info/     # sample_version, module_functions
-    ├── async/    # sample_async_add, sample_timer(+cancel)
-    ├── events/   # sample_trigger_event
-    ├── objects/  # counter_create — userdata methods example
-    ├── state/    # sample_session_hit — per-resource state
-    └── raw/      # sample_stack_dump — direct stack access
+config/
+└── module.toml    # single project configuration (identity, build, async)
 
-tests/            # embedded-Lua harness + scripts
-vendor/           # mta-sdk (SDK headers) + lua (Lua 5.1.5)
+source/
+├── functions/    👉 THE ONLY folder you touch
+│   ├── basics/   # sample_add, sample_echo, sample_greet, sample_tag,
+│   │            #   sample_minmax, sample_range
+│   ├── tables/   # sample_table_stats, sample_table_get/set
+│   ├── info/     # sample_version, module_functions
+│   ├── async/    # sample_async_add, sample_timer(+cancel)
+│   ├── events/   # sample_trigger_event
+│   ├── objects/  # counter_create — userdata methods example
+│   ├── state/    # sample_session_hit — per-resource state
+│   └── raw/      # sample_stack_dump — direct stack access
+├── library/      # reusable C++ helpers (no Lua registration)
+└── sdk/          # framework internals (module/lua/registry/runtime)
+    ├── abi/      #   MTA contract: six entry points, export tables
+    ├── lua/      #   Lua stack helpers: mta::lua
+    │   ├── bind.hpp is at sdk/bind/  👉 binder: args<...>, pull/push
+    │   ├── argument.hpp  #   Argument: one Lua value + tables
+    │   ├── arguments.hpp  #   Arguments: a list of values
+    │   └── protect.hpp   #   exceptions -> Lua errors
+    ├── registry/ #   registry + MTA_LUA_FUNCTION / MTA_LUA_FUNC macros
+    ├── runtime/  #   scheduler, callback
+    ├── resources/#   per-resource state hub/store
+    ├── objects/  #   userdata metatables
+    ├── events/   #   module -> Lua events
+    └── logging/  #   mta::log
+
+other/
+├── tests/        # lua/ (embedded harness + scripts), unit/, integration/
+├── server/       # real-MTA-server test infrastructure
+├── documents/    # API.md, ARCHITECTURE.md, GUIDES.md, TUTORIAL.md
+├── tools/        # developer CLI (mta)
+└── third_party/  # mta-sdk (SDK headers) + lua (Lua 5.1.5)
 cmake/            # build infrastructure
 ```
 
 Put your own functions into domain folders inside functions/ — for example
 functions/crypto/ or functions/http/. A domain is created by simply adding a
-folder with a .cpp: the whole src/**/*.cpp tree is built automatically.
+folder with a .cpp: the whole source/**/*.cpp tree is built automatically.
 
-## Module identity
+## Configuration (config/module.toml)
 
-The module's public identity is three CMake cache variables — no source edits
-are ever needed to rename it:
+The project is configured in **one file** — `config/module.toml`. CMake reads
+it directly (before `project()`), so the identity and build options defined
+there flow into the binary, the MTA registration, packaging and diagnostics:
+
+```toml
+[module]
+name = "base"              # -> base.dll / base.so, mtaserver.conf <module src="base"/>
+title = "Base Module"      # console name shown when the module loads
+author = "Developer"       # console author
+version = "2.0.0"          # single version source (project VERSION too)
+
+[build]
+cxx_standard = 20
+unity = true
+lto = true
+
+[async]
+workers = "auto"           # worker threads for background tasks
+queue = 4096
+
+[features]
+async = true
+userdata = true
+events = true
+objects = true
+```
+
+Change `name`, reconfigure, and the artifact becomes `my_mod.dll` — nothing
+else to touch. Advanced users can still override any value per configure
+with CMake cache variables (the TOML stays the default):
 
 ```bash
-cmake --preset win-mingw \
-    -DSDK_MODULE_NAME=my_mod \          # -> my_mod.dll / my_mod.so (default: base)
-    -DSDK_MODULE_TITLE="My Module" \    # console name (default: Base Module)
-    -DSDK_MODULE_AUTHOR="Jane Doe"      # console author (default: anon)
+cmake --preset win-mingw -DSDK_MODULE_NAME=my_mod
+cmake --preset win-mingw -DSDK_MODULE_TITLE="My Module" -DSDK_MODULE_AUTHOR="Jane Doe"
 ```
 
 - `SDK_MODULE_NAME` — output binary name **without extension**; default
@@ -92,8 +131,9 @@ cmake --preset win-mingw \
 - `SDK_MODULE_TITLE` / `SDK_MODULE_AUTHOR` — the name/author the server
   shows in the console when the module loads.
 
-Set them once per configure; everything else picks them up automatically.
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#6-configuration--no-source-edits-needed).
+The parser lives in `cmake/core/module-config.cmake`; `[async]` and
+`[features]` are consumed by the subsystems that own them (async, objects).
+See [other/documents/ARCHITECTURE.md](other/documents/ARCHITECTURE.md#6-configuration--no-source-edits-needed).
 
 ## Building
 
@@ -252,7 +292,7 @@ MTA_LUA_FUNCTION("my_async", "Computes in the background; callback(result) runs 
 
 Callback is a parameter type: binding the Lua function, surviving resource
 restarts and auto-release are handled by the framework. Timers — see
-src/functions/async/timers.cpp (sample_timer/sample_timer_cancel). Callback
+source/functions/async/timers.cpp (sample_timer/sample_timer_cancel). Callback
 is move-only — wrap it in make_shared when capturing into a completion.
 
 ### Per-resource state
@@ -294,7 +334,7 @@ MTA_LUA_FUNCTION("my_raw", "Description.")
 }
 ```
 
-A live example is src/functions/raw/stack_dump.cpp.
+A live example is source/functions/raw/stack_dump.cpp.
 
 ### Lambda style (short one-liners)
 
@@ -349,8 +389,8 @@ cmake --build --preset win-mingw --target sdk_tests
 ctest --preset win-mingw            # or run sdk_tests.exe directly
 ```
 
-The harness (tests/harness.cpp) starts a clean Lua 5.1, installs a mock
-manager and runs tests/scripts/*.lua: basic functions, tables, async,
+The harness (other/tests/lua/harness.cpp) starts a clean Lua 5.1, installs a mock
+manager and runs other/tests/lua/scripts/*.lua: basic functions, tables, async,
 timers and every binder feature (optional, multiple results, variadics,
 direct stack). Add your own scripts — they are picked up automatically.
 

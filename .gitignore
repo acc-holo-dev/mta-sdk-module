@@ -2,6 +2,13 @@
 /dist/
 /.vscode/
 
+# Locally provisioned MTA servers (other/server/ infrastructure)
+/other/server/downloads/
+/other/server/servers/
+
+# Generated documentation (mta docs)
+/generated/
+
 # Editor/IDE noise
 *.user
 *.suo

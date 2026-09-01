@@ -1,10 +1,27 @@
 cmake_minimum_required(VERSION 3.27)
 
-# The project is the SDK template; the produced module binary is named by
-# SDK_MODULE_NAME (default "base" -> base.dll / base.so).
-project(mta_sdk_module VERSION 1.1.0 LANGUAGES C CXX)
+# ---------------------------------------------------------------------------
+# config/module.toml is the single source of truth for module identity and
+# build options (plan PROMT.md §4/§5). It is read BEFORE project() so that
+# project(VERSION) itself comes from the TOML. Explicit CMake cache entries
+# (-DSDK_MODULE_NAME=... etc.) remain as per-configure overrides.
+# ---------------------------------------------------------------------------
+include(cmake/core/module-config.cmake)
+read_module_toml("${CMAKE_CURRENT_SOURCE_DIR}/config/module.toml" MODULE_CFG)
 
-set(CMAKE_CXX_STANDARD 20)
+# The project is the SDK template; the produced module binary is named by the
+# [module] name in config/module.toml (default "base" -> base.dll / base.so).
+project(mta_sdk_module VERSION "${MODULE_CFG_module_version}" LANGUAGES C CXX)
+
+# C++ standard: [build] cxx_standard is the default; -DCMAKE_CXX_STANDARD=...
+# still overrides it.
+if(NOT DEFINED CACHE{CMAKE_CXX_STANDARD})
+  if(MODULE_CFG_build_cxx_standard)
+    set(CMAKE_CXX_STANDARD "${MODULE_CFG_build_cxx_standard}")
+  else()
+    set(CMAKE_CXX_STANDARD 20)
+  endif()
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -15,22 +32,45 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
-option(SDK_UNITY "Enable unity build" ON)
-option(SDK_LTO "Enable link-time optimization" ON)
+# [build] unity / lto are the defaults; explicit -DSDK_UNITY / -DSDK_LTO
+# cache entries override them (advanced use).
+if(DEFINED CACHE{SDK_UNITY})
+  set(SDK_UNITY "$CACHE{SDK_UNITY}")
+else()
+  module_toml_bool("${MODULE_CFG_build_unity}" SDK_UNITY)
+endif()
+if(DEFINED CACHE{SDK_LTO})
+  set(SDK_LTO "$CACHE{SDK_LTO}")
+else()
+  module_toml_bool("${MODULE_CFG_build_lto}" SDK_LTO)
+endif()
 option(SDK_BUILD_TESTS "Build the embedded Lua test harness (sdk_tests)" ON)
 option(SDK_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
 
 # ---------------------------------------------------------------------------
-# Module identity — every knob is a plain CMake cache variable, so naming the
-# module never requires touching C++ sources.
+# Module identity — authored in config/module.toml [module]; renaming the
+# module never touches C++ or CMake. The cache variables below are optional
+# per-configure overrides:
 #
 #   cmake -DSDK_MODULE_NAME=my_mod          -> my_mod.dll / my_mod.so
 #   cmake -DSDK_MODULE_TITLE="My Module"    -> console name
 #   cmake -DSDK_MODULE_AUTHOR="Jane Doe"    -> console author
 # ---------------------------------------------------------------------------
-set(SDK_MODULE_NAME "base" CACHE STRING "Output name of the module binary, without extension (base -> base.dll / base.so)")
-set(SDK_MODULE_TITLE "Base Module" CACHE STRING "Module display name shown in the server console")
-set(SDK_MODULE_AUTHOR "anon" CACHE STRING "Module author shown in the server console")
+if(DEFINED CACHE{SDK_MODULE_NAME})
+  set(SDK_MODULE_NAME "$CACHE{SDK_MODULE_NAME}")
+else()
+  set(SDK_MODULE_NAME "${MODULE_CFG_module_name}")
+endif()
+if(DEFINED CACHE{SDK_MODULE_TITLE})
+  set(SDK_MODULE_TITLE "$CACHE{SDK_MODULE_TITLE}")
+else()
+  set(SDK_MODULE_TITLE "${MODULE_CFG_module_title}")
+endif()
+if(DEFINED CACHE{SDK_MODULE_AUTHOR})
+  set(SDK_MODULE_AUTHOR "$CACHE{SDK_MODULE_AUTHOR}")
+else()
+  set(SDK_MODULE_AUTHOR "${MODULE_CFG_module_author}")
+endif()
 
 find_package(Threads REQUIRED)
 
@@ -65,9 +105,9 @@ target_compile_definitions(sdk_core PRIVATE
 
 target_include_directories(sdk_core
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/source
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/mta-sdk
+        ${CMAKE_CURRENT_SOURCE_DIR}/other/third_party/mta-sdk
 )
 
 target_link_libraries(sdk_core
@@ -114,7 +154,7 @@ if(WIN32)
   # SDK_MODULE_NAME automatically (it lives out of source in the build dir).
   file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/module")
   configure_file(
-      src/module/module.def.in
+      source/sdk/abi/module.def.in
       "${CMAKE_BINARY_DIR}/module/${SDK_MODULE_NAME}.def"
       @ONLY)
   target_sources(sdk_base PRIVATE "${CMAKE_BINARY_DIR}/module/${SDK_MODULE_NAME}.def")
@@ -143,22 +183,29 @@ endif()
 if(SDK_BUILD_TESTS)
   enable_testing()
 
-  add_executable(sdk_tests tests/harness.cpp)
+  add_executable(sdk_tests other/tests/lua/harness.cpp)
   target_link_libraries(sdk_tests PRIVATE sdk_core mta_lua Threads::Threads)
 
   target_include_directories(sdk_tests PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/src
-      ${CMAKE_CURRENT_SOURCE_DIR}/vendor/mta-sdk
+      ${CMAKE_CURRENT_SOURCE_DIR}/source
+      ${CMAKE_CURRENT_SOURCE_DIR}/other/third_party/mta-sdk
   )
 
   target_compile_definitions(sdk_tests PRIVATE
-      SDK_TESTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/scripts"
+      SDK_TESTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/other/tests/lua/scripts"
   )
 
   sdk_target_apply_baseline_options(sdk_tests)
   sdk_enable_lto(sdk_tests)
 
   add_test(NAME sdk_tests COMMAND sdk_tests)
+
+  # Configuration parser tests (CMake-script mode).
+  add_test(NAME module_config_parse
+      COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/other/tests/unit/module_config_parse.cmake")
+  add_test(NAME module_config_rejects_garbage
+      COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/other/tests/unit/module_config_rejects_garbage.cmake")
+  set_tests_properties(module_config_rejects_garbage PROPERTIES WILL_FAIL TRUE)
 endif()
 
 # Install rules + packaging for releases (see cmake/install.cmake).

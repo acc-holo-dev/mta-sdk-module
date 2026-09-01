@@ -8,6 +8,28 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `config/module.toml` — the single project configuration file (plan §4/§5):
+  module identity (`[module]` name/title/author/version), build options
+  (`[build]` cxx_standard/unity/lto) and forward-looking `[async]` /
+  `[features]` sections. CMake parses the TOML directly before `project()`
+  (`cmake/core/module-config.cmake`), so even `project(VERSION)` comes from
+  the TOML. Explicit `-D` cache entries keep working as overrides.
+- CTest tests for the TOML reader (`module_config_parse`,
+  `module_config_rejects_garbage`).
+
+### Changed
+
+- Module identity is no longer defined by CMake cache defaults: the cache
+  variables `SDK_MODULE_NAME/TITLE/AUTHOR` are now optional overrides of
+  `config/module.toml` values. A previously configured build directory
+  caches its old values — run `cmake -U "SDK_MODULE_*" ...` once (or
+  configure a fresh directory) to re-read the TOML.
+- `SDK_UNITY` / `SDK_LTO` defaults come from `config/module.toml` `[build]`
+  (removed from the presets so the TOML stays the single source).
+- Module version bumped to 2.0.0 (V2 line).
+
+### Added
+
 - Configurable module identity: `SDK_MODULE_NAME` (default `base` →
   `base.dll` / `base.so`), `SDK_MODULE_TITLE` and `SDK_MODULE_AUTHOR` are
   plain CMake cache variables — renaming the module no longer requires

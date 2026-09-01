@@ -4,7 +4,11 @@ endif()
 
 option(SDK_LUA_WARNINGS_OFF "Silence warnings for third-party Lua" ON)
 
-set(LUA_SRC_DIR "${CMAKE_SOURCE_DIR}/vendor/lua/src" CACHE PATH "Lua 5.1 source dir")
+set(LUA_SRC_DIR "${CMAKE_SOURCE_DIR}/other/third_party/lua/src" CACHE PATH "Lua 5.1 source dir")
+if(NOT EXISTS "${LUA_SRC_DIR}")
+  # Reset a stale cached path (e.g. left over from an earlier checkout layout).
+  set(LUA_SRC_DIR "${CMAKE_SOURCE_DIR}/other/third_party/lua/src" CACHE PATH "Lua 5.1 source dir" FORCE)
+endif()
 
 set(LUA_SOURCES
   ${LUA_SRC_DIR}/lapi.c

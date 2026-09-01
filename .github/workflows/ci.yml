@@ -19,14 +19,15 @@ jobs:
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y ninja-build g++
 
-      # The module compiles against vendor/mta-sdk/lua, the server-side Lua ABI
-      # against vendor/lua/src. They must never drift (lua_newstate/luaL_newstate
-      # carry the server's extra mtasaowner argument).
+      # The module compiles against other/third_party/mta-sdk/lua, the
+      # server-side Lua ABI against other/third_party/lua/src. They must never
+      # drift (lua_newstate/luaL_newstate carry the server's extra mtasaowner
+      # argument).
       - name: Verify Lua headers match the compiled Lua
         run: |
           for h in lua.h luaconf.h lauxlib.h lualib.h; do
-            cmp -s "vendor/mta-sdk/lua/$h" "vendor/lua/src/$h" \
-              || { echo "ERROR: vendor/mta-sdk/lua/$h differs from vendor/lua/src/$h"; exit 1; }
+            cmp -s "other/third_party/mta-sdk/lua/$h" "other/third_party/lua/src/$h" \
+              || { echo "ERROR: other/third_party/mta-sdk/lua/$h differs from other/third_party/lua/src/$h"; exit 1; }
           done
           echo "Lua headers: OK"
 

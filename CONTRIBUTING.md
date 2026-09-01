@@ -5,23 +5,28 @@ live and what conventions to keep.
 
 ## Project layout
 
-- src/module/ — MTA lifecycle hooks (init, pulse, resource events).
-- src/lua/ — Lua-stack helpers and the typed binder (bind.hpp).
-- src/registry/ — function registry and the MTA_LUA_FUNCTION / MTA_LUA_FUNC
-  macros.
-- src/runtime/ — scheduler, callbacks, per-resource state, logging.
-- src/functions/ — your functions, grouped by domain.
-- tests/ — embedded Lua harness (harness.cpp) + scripts.
-- vendor/ — vendored Lua 5.1 and the MTA SDK headers (keep untouched).
+- source/sdk/abi/ — MTA lifecycle hooks (init, pulse, resource events).
+- source/sdk/lua/ — Lua-stack helpers; the typed binder is at
+  source/sdk/bind/bind.hpp.
+- source/sdk/registry/ — the function registry and the
+  MTA_LUA_FUNCTION / MTA_LUA_FUNC macros.
+- source/sdk/runtime/ — scheduler and callbacks; per-resource state lives in
+  source/sdk/resources/, logging in source/sdk/logging/.
+- source/functions/ — your functions, grouped by domain.
+- source/library/ — reusable non-Lua C++ helpers (functions may use them;
+  they must not depend on functions).
+- other/tests/ — lua/ (embedded harness + scripts), unit/, integration/.
+- other/third_party/ — vendored Lua 5.1 and the MTA SDK headers (keep
+  untouched).
 - cmake/ — build infrastructure.
 
 ## Adding a function
 
-1. Drop a .cpp anywhere under src/functions/<domain>/ using one of the two
+1. Drop a .cpp anywhere under source/functions/<domain>/ using one of the two
    registration macros (see README.md, "Writing functions").
 2. Rebuild — new files and their registration are picked up automatically.
-3. Add a Lua test script under tests/scripts/ (naming: NNN_name.lua); the
-   harness runs every script automatically.
+3. Add a Lua test script under other/tests/lua/scripts/ (naming:
+   NNN_name.lua); the harness runs every script automatically.
 
 ## Requirements
 
@@ -48,9 +53,10 @@ plus a unity build) before opening a pull request.
 
 ## Releases
 
-- Bump the version in CMakeLists.txt (project VERSION) only — the module
-  reports it automatically (src/module/module.cpp reads it at configure
-  time); add a CHANGELOG.md entry.
+- Bump the version in `config/module.toml` (`[module] version`) only — the
+  module reports it automatically (CMake derives `project(VERSION)` and
+  `source/sdk/abi/module.cpp` reads it at configure time); add a
+  CHANGELOG.md entry.
 - Pushing a tag like v1.1.0 triggers the Release workflow, which builds
   base.dll / base.so (whatever SDK_MODULE_NAME is set to), packages ZIP
   archives and attaches everything to a GitHub Release (see
