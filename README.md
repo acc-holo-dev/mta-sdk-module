@@ -14,17 +14,20 @@ number, this is a string":
 
 ```cpp
 // source/functions/basics/my_sum.cpp
-#include "sdk/registry/registry.hpp"
+#include <mta/sdk.hpp>
 
-MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
-{
-    auto [a, b] = mta::lua::args<double, double>(L);   // types and checks automatic
-    return mta::lua::push_results(L, a + b);           // return is automatic too
-}
+MTA_FUNCTION("my_sum", "Adds two numbers.",
+    [](double a, double b)
+    {
+        return a + b;   // checks and the return are automatic
+    });
 ```
 
-Rebuild and my_sum is available in every server resource. New .cpp files are
-picked up automatically, and so is their registration.
+`<mta/sdk.hpp>` is the only header a module developer needs (the public
+facade; everything under `source/sdk/` is internal). `MTA_FUNCTION` registers
+the function under **exactly** the name you give — the SDK never adds
+prefixes or namespaces. Rebuild and `my_sum` is available in every server
+resource; new .cpp files are picked up automatically.
 
 ---
 
@@ -161,7 +164,7 @@ Artifact: `build/<preset>/module/<platform>-<arch>/<SDK_MODULE_NAME>.dll`
 2. Add <module src="base"/> (the file name without extension) to
    mtaserver.conf.
 3. Restart the server; the console should show
-   MODULE: Loaded "Base Module" (1.10) by "anon".
+   MODULE: Loaded "Base Module" (2.0) by "Developer".
 
 Module bitness = server bitness (modern MTA is x64).
 
@@ -170,13 +173,20 @@ Module bitness = server bitness (modern MTA is x64).
 ### A simple function
 
 ```cpp
-#include "registry/registry.hpp"
+#include <mta/sdk.hpp>
 
 MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 {
     auto [a, b] = mta::lua::args<double, double>(L);
     return mta::lua::push_results(L, a + b);
 }
+```
+
+Body style is the main one; for one-liners use the lambda style:
+
+```cpp
+MTA_FUNCTION("my_sum2", "Adds two numbers.",
+    [](double a, double b) { return a + b; });
 ```
 
 mta::lua::args<...>(L) reads arguments in order: each type is checked

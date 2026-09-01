@@ -1,12 +1,10 @@
 // An argument-less function returning a table. Facts come from the manager.
 
-#include <string>
+#include <mta/sdk.hpp>
 
 #include "ILuaModuleManager10.h"
 
-#include "sdk/lua/argument.hpp"
-#include "sdk/abi/module.hpp"
-#include "sdk/registry/registry.hpp"
+#include <string>
 
 MTA_LUA_FUNCTION("sample_version",
     "Returns a table with module and server version information.")

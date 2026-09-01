@@ -1,7 +1,7 @@
 // Simplest possible function: arguments are read by type through args<...>,
 // checks and readable errors come for free.
 
-#include "sdk/registry/registry.hpp"
+#include <mta/sdk.hpp>
 
 MTA_LUA_FUNCTION("sample_add", "Returns the sum of two numbers.")
 {

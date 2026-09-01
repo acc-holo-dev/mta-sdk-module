@@ -1,8 +1,7 @@
 // Variadic: read every argument as a list and return them unchanged
 // (including tables) as a list of results.
 
-#include "sdk/lua/arguments.hpp"
-#include "sdk/registry/registry.hpp"
+#include <mta/sdk.hpp>
 
 MTA_LUA_FUNCTION("sample_echo", "Returns all arguments unchanged (including tables).")
 {

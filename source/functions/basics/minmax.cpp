@@ -1,8 +1,8 @@
 // Multiple results: push_results accepts any number of values.
 
-#include <algorithm>
+#include <mta/sdk.hpp>
 
-#include "sdk/registry/registry.hpp"
+#include <algorithm>
 
 MTA_LUA_FUNCTION("sample_minmax", "Returns the minimum and maximum of two numbers (two results).")
 {

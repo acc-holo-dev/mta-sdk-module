@@ -8,6 +8,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Public facade `<mta/sdk.hpp>` (plan §42/§43): the single developer-facing
+  include exporting the registration macros, `mta::lua` values/stack helpers,
+  async (Callback/Scheduler), per-resource state, logging, events and
+  userdata. All sample functions now include only the facade.
+- `MTA_FUNCTION(name, function)` / `MTA_FUNCTION(name, "description",
+  function)` — the plan §6 registration spelling; the function is registered
+  under exactly the given name (no prefixes/namespaces, plan §2).
+
 - `config/module.toml` — the single project configuration file (plan §4/§5):
   module identity (`[module]` name/title/author/version), build options
   (`[build]` cxx_standard/unity/lto) and forward-looking `[async]` /

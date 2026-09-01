@@ -1,8 +1,7 @@
 // Per-resource state: a hit counter for the calling resource. It resets
 // automatically when the resource stops (ResourceStopped).
 
-#include "sdk/registry/registry.hpp"
-#include "sdk/resources/resources.hpp"
+#include <mta/sdk.hpp>
 
 namespace
 {

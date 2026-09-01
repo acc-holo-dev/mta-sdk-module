@@ -6,8 +6,7 @@
 //     c:add(5)  -- 105
 //     c = nil   -- __gc calls ~Counter()
 
-#include "sdk/objects/userdata.hpp"
-#include "sdk/registry/registry.hpp"
+#include <mta/sdk.hpp>
 
 namespace
 {

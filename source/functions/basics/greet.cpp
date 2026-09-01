@@ -1,10 +1,10 @@
 // Optional argument via std::optional: nil or absence yields nullopt,
 // the default is pulled out with value_or.
 
+#include <mta/sdk.hpp>
+
 #include <optional>
 #include <string>
-
-#include "sdk/registry/registry.hpp"
 
 MTA_LUA_FUNCTION("sample_greet", "Greets a name; greeting is optional (nil).")
 {

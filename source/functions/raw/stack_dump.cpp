@@ -2,8 +2,7 @@
 // (dynamic logic, fine-grained parsing). The body receives lua_State* L and
 // may do anything with the stack -- the framework only catches exceptions.
 
-#include "sdk/lua/common.hpp"
-#include "sdk/registry/registry.hpp"
+#include <mta/sdk.hpp>
 
 MTA_LUA_FUNCTION("sample_stack_dump", "Returns the argument count and the type of each argument.")
 {

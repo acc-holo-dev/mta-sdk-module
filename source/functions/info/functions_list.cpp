@@ -1,9 +1,8 @@
 // Built-in introspection: a list of every module function with its description.
 
-#include <string>
+#include <mta/sdk.hpp>
 
-#include "sdk/lua/argument.hpp"
-#include "sdk/registry/registry.hpp"
+#include <string>
 
 MTA_LUA_FUNCTION("module_functions",
     "Returns a table {name = description} with all module functions.")

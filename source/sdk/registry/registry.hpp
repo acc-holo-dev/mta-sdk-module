@@ -73,3 +73,24 @@ private:
 
 // MTA_LUA_FUNCTION("name", "description") { body; arguments via args<...> }
 #define MTA_LUA_FUNCTION(Name, Description)     MTA_LUA_FUNCTION_IMPL((Name), (Description), __COUNTER__)
+
+// --- plan facade spelling ------------------------------------------------------
+
+// MTA_FUNCTION is the developer-facing registration macro (plan §6): the
+// function is registered under EXACTLY the given name -- the SDK never adds
+// prefixes or namespaces.
+//
+//     MTA_FUNCTION("sum", [](double a, double b) { return a + b; });
+//     MTA_FUNCTION("crypto.sha256", "Hashes a string.", [](std::string v) { ... });
+//
+// Two forms:
+//   MTA_FUNCTION(name, function)                    -- no description
+//   MTA_FUNCTION(name, "description", function)     -- with description
+// (A description containing commas must be wrapped in parentheses, like any
+// macro argument.)
+#define MTA_FUNCTION_CHOOSER_(_1, _2, _3, NAME, ...) NAME
+#define MTA_FUNCTION(...)     MTA_FUNCTION_CHOOSER_(__VA_ARGS__, MTA_FUNCTION_DESCRIBED_, MTA_FUNCTION_SIMPLE_)(__VA_ARGS__)
+
+#define MTA_FUNCTION_SIMPLE_(Name, Function)     MTA_LUA_FUNC_IMPL((Name), "", (Function), __COUNTER__)
+
+#define MTA_FUNCTION_DESCRIBED_(Name, Description, Function)     MTA_LUA_FUNC_IMPL((Name), (Description), (Function), __COUNTER__)

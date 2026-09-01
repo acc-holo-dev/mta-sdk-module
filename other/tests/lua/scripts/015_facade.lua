@@ -1,0 +1,24 @@
+-- <mta/sdk.hpp> facade: MTA_FUNCTION registers a lambda under EXACTLY the
+-- developer-provided name (plan §2: no prefixes, no namespaces), with or
+-- without a description.
+
+test_assert(sample_hello("World") == "Hello, World", "facade function returns greeting")
+test_assert(sample_hello_desc("World") == "Good evening, World", "described facade form works")
+
+-- naming rule: registered verbatim, no implicit prefixes
+local list = module_functions()
+test_assert(list["sample_hello"] ~= nil, "sample_hello registered under its exact name")
+test_assert(list["sample_hello"] == "", "descriptionless MTA_FUNCTION has an empty description")
+test_assert(list["sample_hello_desc"] == "Greets politely.", "described form keeps its description")
+
+-- lambda signatures are typed exactly like the classic binder
+-- (numbers coerce to strings like luaL_checkstring; a table is an error)
+local ok, err = pcall(sample_hello, {1, 2})
+test_assert(not ok, "facade lambda validates argument types")
+test_assert(err and string.find(err, "must be a string", 1, true) ~= nil,
+            "typed error message from the facade signature")
+
+local ok2, err2 = pcall(sample_hello)
+test_assert(not ok2, "facade lambda rejects a missing argument")
+test_assert(err2 and string.find(err2, "got no value", 1, true) ~= nil,
+            "missing-argument error message")

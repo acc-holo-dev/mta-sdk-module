@@ -2,14 +2,11 @@
 // repeat_count times (0 = until cancelled). The timer is tied to the
 // callback's resource and is cancelled automatically when that resource stops.
 
+#include <mta/sdk.hpp>
+
 #include <cstdint>
 #include <memory>
 #include <utility>
-
-#include "sdk/lua/arguments.hpp"
-#include "sdk/registry/registry.hpp"
-#include "sdk/runtime/callback.hpp"
-#include "sdk/runtime/scheduler.hpp"
 
 MTA_LUA_FUNCTION("sample_timer",
     "Calls callback(tick) every delay_ms, repeat_count times (0 = forever). Returns the timer id.")

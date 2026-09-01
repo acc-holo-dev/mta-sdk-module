@@ -2,14 +2,10 @@
 // via DoPulse. The Callback is just a typed parameter; the framework binds the
 // Lua function to the resource and survives its restarts.
 
+#include <mta/sdk.hpp>
+
 #include <memory>
 #include <utility>
-
-#include "sdk/lua/arguments.hpp"
-#include "sdk/registry/registry.hpp"
-#include "sdk/runtime/callback.hpp"
-#include "sdk/logging/logging.hpp"
-#include "sdk/runtime/scheduler.hpp"
 
 MTA_LUA_FUNCTION("sample_async_add",
     "Adds two numbers on a worker; callback(sum) fires on the next DoPulse.")

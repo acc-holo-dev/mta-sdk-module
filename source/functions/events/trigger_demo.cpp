@@ -4,9 +4,7 @@
 //     addEventHandler("onSampleEvent", root, function(...) ... end)
 //     sample_trigger_event("onSampleEvent", 1, "two")
 
-#include "sdk/lua/arguments.hpp"
-#include "sdk/events/events.hpp"
-#include "sdk/registry/registry.hpp"
+#include <mta/sdk.hpp>
 
 MTA_LUA_FUNCTION("sample_trigger_event",
     "Triggers an event with the given name and arguments (source is root).")

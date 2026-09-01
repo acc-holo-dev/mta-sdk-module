@@ -98,3 +98,39 @@ newest last.
   subsystems land (PHASE 6 async workers/queue, PHASE 8 feature gating) —
   no dead compile-time defines are emitted meanwhile.
 - **NEXT**: PHASE 3 — public facade `<mta/sdk.hpp>` + `MTA_FUNCTION`.
+
+## PHASE 3 — SDK public facade
+
+- **PHASE**: 3 — umbrella header and developer-facing registration spelling.
+- **CHANGED**:
+  - All 16 sample functions under `source/functions/**` now include ONLY
+    `<mta/sdk.hpp>` (the developer contract, plan §42); internal
+    `sdk/...` includes removed from developer code. `version.cpp` keeps its
+    `ILuaModuleManager10.h` include (it calls manager methods directly).
+  - README: facade shown as the primary include; registration examples use
+    `MTA_FUNCTION`; install example reflects the 2.0 identity.
+- **ADDED**:
+  - `source/mta/sdk.hpp` — umbrella header grouping registration, Lua
+    values/stack helpers, runtime services (callback/scheduler/resources/
+    logging/events) and userdata. Internal layers untouched and still
+    reachable (no behavior change).
+  - `MTA_FUNCTION(name, function)` and `MTA_FUNCTION(name, "description",
+    function)` in `sdk/registry/registry.hpp` — plan §6 spelling, built on
+    the existing `MTA_LUA_FUNC_IMPL` machinery (arg-count selection macro).
+    Registered names are verbatim (plan §2 rule already held; now pinned by
+    tests).
+  - `source/functions/basics/hello.cpp` — facade-style samples
+    (`sample_hello`, `sample_hello_desc`).
+  - `other/tests/lua/scripts/015_facade.lua` — exact-name registration,
+    description handling, typed errors, missing-argument errors.
+- **REMOVED**: nothing (MTA_LUA_FUNCTION / MTA_LUA_FUNC stay, KEEP per
+  audit §3).
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (sdk_tests now 92
+  assertions incl. the facade script).
+- **RISKS**: the macro arg-count selection requires descriptions without
+  bare commas (wrap in parens) — documented at the macro. A test initially
+  expected a type error for `sample_hello(42)`; numbers convert to strings
+  by design (`luaL_checkstring` semantics, documented) — the test now pins
+  that documented behavior with a table argument instead.
+- **NEXT**: PHASE 4 — binder V2 (plan §7 error format, signature metadata,
+  unified error model) with same-phase test updates.

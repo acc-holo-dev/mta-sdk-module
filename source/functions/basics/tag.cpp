@@ -1,9 +1,9 @@
 // Same std::optional, but here nil is a meaningful value.
 
+#include <mta/sdk.hpp>
+
 #include <optional>
 #include <string>
-
-#include "sdk/registry/registry.hpp"
 
 MTA_LUA_FUNCTION("sample_tag", "value/tag; tag is optional (nil).")
 {

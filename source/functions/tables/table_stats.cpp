@@ -4,11 +4,10 @@
 //   sample_table_stats({10, 20, {30, 40}, name = "x", flag = true})
 //     -> {values=7, numbers=4, strings=1, sum=100, depth=2}
 
+#include <mta/sdk.hpp>
+
 #include <algorithm>
 #include <cstdint>
-
-#include "sdk/lua/argument.hpp"
-#include "sdk/registry/registry.hpp"
 
 namespace
 {

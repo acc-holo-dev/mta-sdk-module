@@ -1,11 +1,9 @@
 // Result list: use Arguments when the number of results is dynamic.
 // Integer parameters are range-checked automatically.
 
-#include <cstdint>
+#include <mta/sdk.hpp>
 
-#include "sdk/lua/arguments.hpp"
-#include "sdk/lua/protect.hpp"
-#include "sdk/registry/registry.hpp"
+#include <cstdint>
 
 MTA_LUA_FUNCTION("sample_range", "Returns the numbers from 'from' to 'to' (several results).")
 {

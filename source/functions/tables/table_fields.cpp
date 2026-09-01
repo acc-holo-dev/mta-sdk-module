@@ -3,10 +3,9 @@
 //     local t = {name = "Alice", hp = 100}
 //     local name, hp = sample_table_get(t)   -- "Alice", 100
 
-#include <string>
+#include <mta/sdk.hpp>
 
-#include "sdk/lua/table_helpers.hpp"
-#include "sdk/registry/registry.hpp"
+#include <string>
 
 MTA_LUA_FUNCTION("sample_table_get",
     "Reads the 'name' (string) and 'hp' (number) fields of a table; returns both.")
