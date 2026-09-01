@@ -8,6 +8,30 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- ResourceContext generations (plan §11/§33, P0): every resource stop ends
+  the VM generation (`Hub::generation`/`bump_generation`). Callbacks, async
+  task completions and timers record the generation they were created in and
+  are structurally unable to operate across a restart of their resource --
+  even when the fresh registry hands out the same `luaL_ref` index.
+- Harness restart simulation (plan §33): `test_resource_restart()` swaps in
+  a REAL fresh Lua VM (fresh registry) under a new generation;
+  `test_fresh_vm_dostring`/`test_fresh_vm_get` drive and observe it; a new
+  regression script `072_restart.lua` reproduces the audited §5.1
+  generation-confusion bug without the fix and passes with it (verified).
+- `mta::log::debug(...)` overload for messages outside a VM context.
+
+### Changed
+
+- `Callback` identity is now (resource, generation, ref): stale callbacks
+  are dropped with a debug log, and releasing a stale callback never
+  untracks the live callback that reused its index.
+- Timers store the owner's generation; the pump drops timers of a stale
+  generation; `handle_resource_stopped` still cancels them immediately.
+- `release_all_callbacks` unrefs only live references of the current
+  generation.
+
+### Added
+
 - Unified error model `sdk/errors/errors.hpp` (plan §19): `mta::errors::Error`
   with categories (Generic, InvalidArgument, InvalidType, MissingArgument,
   ResourceStopped, InvalidCallback, InvalidObject, AsyncCancelled,
@@ -35,6 +59,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The protected_call boundary re-renders unexpected std exceptions as
   internal errors; deliberate `raise_error` messages stay verbatim.
 
+### Added
+
 - Public facade `<mta/sdk.hpp>` (plan §42/§43): the single developer-facing
   include exporting the registration macros, `mta::lua` values/stack helpers,
   async (Callback/Scheduler), per-resource state, logging, events and
@@ -42,6 +68,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `MTA_FUNCTION(name, function)` / `MTA_FUNCTION(name, "description",
   function)` — the plan §6 registration spelling; the function is registered
   under exactly the given name (no prefixes/namespaces, plan §2).
+
+### Added
 
 - `config/module.toml` — the single project configuration file (plan §4/§5):
   module identity (`[module]` name/title/author/version), build options

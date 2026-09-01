@@ -181,3 +181,52 @@ newest last.
 - **NEXT**: PHASE 5 (P0) — ResourceContext/generation: fix the callback
   generation-confusion bug (audit §5.1), harness fresh-VM simulation, §33
   restart regression tests.
+
+## PHASE 5 — ResourceContext/generation (P0)
+
+- **PHASE**: 5 — VM-generation safety for callbacks, async tasks and timers
+  (plan §11/§12/§14/§33; closes the audit §5.1 P0 finding).
+- **CHANGED**:
+  - `sdk/resources/resources.{hpp,cpp}`: `Hub` now owns the ResourceContext
+    identity — `generation(resource)` (starts at 1, +1 per completed stop)
+    and `bump_generation(resource)`, called at the top of
+    `notify_resource_stopped` so every sink sees the finished generation.
+  - `sdk/runtime/callback.{hpp,cpp}`: `Callback` records the resource's
+    generation at `from_stack` time. `TrackedRef` carries the generation;
+    `ref_is_dead` treats a foreign-generation entry as dead; `untrack_ref`
+    only touches the callback's OWN generation (a stale callback releasing
+    itself can no longer untrack the live callback that reused its index);
+    `call()` re-checks the Hub generation after the VM lookup (second line
+    of defense) and drops stale callbacks with a debug log;
+    `release_all_callbacks` unrefs only live current-generation refs.
+  - `sdk/runtime/scheduler.cpp`: timers store the owner's generation;
+    `pump()` drops (and logs) timers of a stale generation;
+    `handle_resource_stopped` still cancels all resource timers immediately.
+  - `sdk/logging/logging.hpp`: `debug(...)` overload without a VM context.
+- **ADDED**:
+  - Harness restart simulation (plan §33): `test_resource_restart()` runs
+    the stop hooks and swaps in a REAL fresh Lua VM (fresh registry, fresh
+    luaL_ref space) under the new generation;
+    `test_fresh_vm_dostring`/`test_fresh_vm_get` drive/observe it;
+    `test_resource_restore()` reattaches the script VM afterwards (harness
+    bookkeeping only). All VMs are closed at harness shutdown.
+  - `other/tests/lua/scripts/072_restart.lua` — the §33 regression: an async
+    completion and timers from generation N-1 face a generation-N callback
+    that holds the SAME luaL_ref index 1 in the fresh registry; the stale
+    completion must never fire the new function, the new completions must
+    arrive, and multiple fresh-generation timers must fire.
+  - CHANGELOG entries for the phase.
+- **REMOVED**: nothing.
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (sdk_tests 125+
+  assertions, including 072). Verified the regression catches the bug: with
+  the generation checks temporarily disabled the 072 assertion
+  "stale generation-2 completion never fired in the fresh VM" fails
+  (audited §5.1 behavior reproduced), and passes again with the fix
+  restored.
+- **RISKS**: generation bookkeeping lives in `Hub` (main-thread only, like
+  the lifecycle hooks) — no locking added because every writer runs on the
+  main thread; the harness `test_resource_restore` helper is simulation
+  plumbing, documented as such.
+- **NEXT**: PHASE 6 — Async V2: task handle (cancel/done/valid), queue
+  limits consuming `[async] queue`, worker count from `[async] workers`,
+  resource ownership and safe shutdown.

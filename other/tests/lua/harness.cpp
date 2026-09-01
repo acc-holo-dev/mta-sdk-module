@@ -3,15 +3,23 @@
 // Loads the module core into a clean Lua 5.1 interpreter together with a
 // mock ILuaModuleManager10 and runs every other/tests/lua/scripts/*.lua. Module
 // functions are verified without launching an MTA server: argument types,
-// error translation, tables, async result delivery, timers.
+// error translation, tables, async result delivery, timers, resource
+// restarts (plan §33: a restart swaps in a REAL fresh VM -- fresh registry,
+// fresh luaL_ref space -- under a new generation).
 //
 // Lua-side helpers:
-//   test_assert(condition, message)  -- records a pass/fail
-//   test_pump(milliseconds)          -- pumps DoPulse for the given time
+//   test_assert(condition, message)   -- records a pass/fail
+//   test_pump(milliseconds)           -- pumps DoPulse for the given time
+//   test_resource_stop()              -- ResourceStopping + ResourceStopped
+//   test_resource_start()             -- re-registers functions (same VM)
+//   test_resource_restart()           -- stop + REAL fresh VM (new generation)
+//   test_fresh_vm_dostring(chunk)     -- runs a chunk in the current resource VM
+//   test_fresh_vm_get(name)           -- copies a global from that VM here
 
 #include "ILuaModuleManager10.h"
 
 #include "sdk/lua/common.hpp"
+#include "sdk/lua/argument.hpp"
 #include "sdk/abi/module.hpp"
 
 #include <algorithm>
@@ -31,6 +39,11 @@ namespace
 int g_passed = 0;
 int g_failed = 0;
 int g_script_errors = 0;
+
+class MockModuleManager;
+
+MockModuleManager *g_manager = nullptr;
+std::vector<lua_State *> g_all_vms;
 
 // Manager mock: registers functions into the test VM, reports fake server
 // facts and "knows" a single resource named test_resource.
@@ -135,6 +148,8 @@ public:
     }
 };
 
+void register_test_helpers(lua_State *lua_vm);
+
 int test_assert(lua_State *lua_vm)
 {
     const bool condition = lua_toboolean(lua_vm, 1) != 0;
@@ -174,19 +189,116 @@ int test_pump(lua_State *lua_vm)
     return 0;
 }
 
-// Simulates a resource stop: ResourceStopping + ResourceStopped.
-int test_resource_stop(lua_State *lua_vm)
+// Simulates a resource stop: ResourceStopping + ResourceStopped on the
+// CURRENT resource VM (which may differ from the VM the script runs in
+// after a restart).
+int test_resource_stop(lua_State *)
 {
-    mta::module::resource_stopping(lua_vm);
-    mta::module::resource_stopped(lua_vm);
+    if (g_manager->test_vm != nullptr)
+    {
+        mta::module::resource_stopping(g_manager->test_vm);
+        mta::module::resource_stopped(g_manager->test_vm);
+    }
     return 0;
 }
 
-// Simulates a resource restart: re-registers functions into the VM.
-int test_resource_start(lua_State *lua_vm)
+// Simulates a resource restart that reuses the same VM (functions
+// re-registered; the VM generation advanced through the stop above).
+int test_resource_start(lua_State *)
 {
-    mta::module::register_functions(lua_vm);
+    if (g_manager->test_vm != nullptr)
+    {
+        mta::module::register_functions(g_manager->test_vm);
+    }
     return 0;
+}
+
+// Plan §33: a restart gives the resource a REAL fresh VM -- fresh registry,
+// fresh luaL_ref space -- under a new generation. The script itself keeps
+// running in the VM it started in; use test_fresh_vm_dostring /
+// test_fresh_vm_get to drive and observe the new one.
+int test_resource_restart(lua_State *)
+{
+    if (g_manager->test_vm != nullptr)
+    {
+        mta::module::resource_stopping(g_manager->test_vm);
+        mta::module::resource_stopped(g_manager->test_vm);
+    }
+
+    // The vendored Lua is MTA's patched 5.1: luaL_newstate takes the state's
+    // owner (mtasaowner) - nullptr for a module-owned state.
+    lua_State *fresh = luaL_newstate(nullptr);
+    luaL_openlibs(fresh);
+    g_manager->test_vm = fresh;
+    g_all_vms.push_back(fresh);
+
+    mta::module::register_functions(fresh);
+    register_test_helpers(fresh);
+    return 0;
+}
+
+// Runs a Lua chunk inside the CURRENT resource VM. Returns true, or false
+// plus the error message.
+int test_fresh_vm_dostring(lua_State *caller)
+{
+    const char *chunk = luaL_checkstring(caller, 1);
+    lua_State *vm = g_manager->test_vm;
+    if (vm == nullptr)
+    {
+        lua_pushboolean(caller, 0);
+        lua_pushliteral(caller, "no resource VM");
+        return 2;
+    }
+    if (luaL_dostring(vm, chunk) != LUA_OK)
+    {
+        const char *error = lua_tostring(vm, -1);
+        lua_pushboolean(caller, 0);
+        lua_pushstring(caller, error ? error : "unknown error");
+        lua_pop(vm, 1);
+        return 2;
+    }
+    lua_pushboolean(caller, 1);
+    return 1;
+}
+
+// Copies the global 'name' from the CURRENT resource VM into the calling VM
+// (a value snapshot; tables are deep-copied by the Argument reader).
+int test_fresh_vm_get(lua_State *caller)
+{
+    const char *name = luaL_checkstring(caller, 1);
+    lua_State *vm = g_manager->test_vm;
+    if (vm == nullptr)
+    {
+        lua_pushnil(caller);
+        return 1;
+    }
+    lua_getglobal(vm, name);
+    mta::lua::Argument value;
+    value.read(vm, -1);
+    lua_pop(vm, 1);
+    value.push(caller);
+    return 1;
+}
+
+// Harness bookkeeping after a restart test: reattaches the resource VM to
+// the VM the scripts run in, so later scripts keep working against the VM
+// they are running in. (A real server never mixes VMs like this.)
+int test_resource_restore(lua_State *caller)
+{
+    g_manager->test_vm = caller;
+    return 0;
+}
+
+void register_test_helpers(lua_State *lua_vm)
+{
+    lua_register(lua_vm, "test_assert", test_assert);
+    lua_register(lua_vm, "test_pump", test_pump);
+    lua_register(lua_vm, "test_resource_stop", test_resource_stop);
+    lua_register(lua_vm, "test_resource_start", test_resource_start);
+    lua_register(lua_vm, "test_resource_restart", test_resource_restart);
+    lua_register(lua_vm, "test_fresh_vm_dostring", test_fresh_vm_dostring);
+    lua_register(lua_vm, "test_fresh_vm_get", test_fresh_vm_get);
+    lua_register(lua_vm, "test_resource_restore", test_resource_restore);
 }
 } // namespace
 
@@ -204,9 +316,11 @@ int main()
         return 2;
     }
     luaL_openlibs(lua_vm);
+    g_all_vms.push_back(lua_vm);
 
     MockModuleManager manager;
     manager.test_vm = lua_vm;
+    g_manager = &manager;
 
     char module_name[MAX_INFO_LENGTH * 2]{};
     char module_author[MAX_INFO_LENGTH * 2]{};
@@ -219,11 +333,7 @@ int main()
     }
 
     mta::module::register_functions(lua_vm);
-
-    lua_register(lua_vm, "test_assert", test_assert);
-    lua_register(lua_vm, "test_pump", test_pump);
-    lua_register(lua_vm, "test_resource_stop", test_resource_stop);
-    lua_register(lua_vm, "test_resource_start", test_resource_start);
+    register_test_helpers(lua_vm);
 
     std::printf("harness: module functions registered: %zu\n", manager.registered_names.size());
 
@@ -251,7 +361,15 @@ int main()
     }
 
     mta::module::shutdown();
-    lua_close(lua_vm);
+
+    // The module is shut down and the manager no longer hands out VMs; close
+    // every VM created during the run (the script VM plus restart VMs).
+    g_manager = nullptr;
+    manager.test_vm = nullptr;
+    for (lua_State *vm : g_all_vms)
+    {
+        lua_close(vm);
+    }
 
     std::printf("\nharness: passed %d, failed %d, script errors %d\n", g_passed, g_failed,
                 g_script_errors);

@@ -99,4 +99,20 @@ void debug(lua_State *lua_vm, Args &&...args)
         write_debug(lua_vm, stream.str());
     }
 }
+
+// Debug message outside a VM context (no resource attribution).
+template <typename... Args>
+void debug(Args &&...args)
+{
+    if constexpr (sizeof...(args) > 0)
+    {
+        if (get_level() > Level::Debug)
+        {
+            return;
+        }
+        std::ostringstream stream;
+        (stream << ... << std::forward<Args>(args));
+        write_debug(nullptr, stream.str());
+    }
+}
 } // namespace mta::log

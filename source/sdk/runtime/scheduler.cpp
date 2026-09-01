@@ -1,6 +1,7 @@
 #include "sdk/runtime/scheduler.hpp"
 
 #include "sdk/logging/logging.hpp"
+#include "sdk/resources/resources.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -42,6 +43,9 @@ struct Timer
 {
     std::uint64_t id = 0;
     std::string resource;
+    // VM generation of the owning resource at creation time (plan §14): a
+    // timer never fires across a restart of its resource.
+    std::uint64_t generation = 0;
     clock_type::time_point next_fire{};
     int interval_ms = 1;
     std::int64_t repeats_left = 0; // 0 = forever
@@ -196,7 +200,9 @@ void Scheduler::pump()
     // Fire the timers whose time has come. Due timers are moved into a local
     // snapshot BEFORE any callback runs: a callback may create or cancel
     // timers (post_timer/cancel_timer), and mutating impl_->timers while
-    // iterating over it would invalidate iterators and references.
+    // iterating over it would invalidate iterators and references. Timers of
+    // a stale generation (their resource restarted meanwhile) are dropped:
+    // they must never fire into a fresh VM (plan §14).
     const auto now = clock_type::now();
 
     std::vector<Timer> due;
@@ -204,15 +210,20 @@ void Scheduler::pump()
         auto &timers = impl_->timers;
         for (auto it = timers.begin(); it != timers.end();)
         {
-            if (it->next_fire <= now)
-            {
-                due.push_back(std::move(*it));
-                it = timers.erase(it);
-            }
-            else
+            if (it->next_fire > now)
             {
                 ++it;
+                continue;
             }
+            if (it->generation != mta::resources::Hub::instance().generation(it->resource))
+            {
+                mta::log::debug("timer: dropping a stale timer of resource '", it->resource,
+                                "' from generation ", it->generation);
+                it = timers.erase(it);
+                continue;
+            }
+            due.push_back(std::move(*it));
+            it = timers.erase(it);
         }
     }
 
@@ -261,6 +272,7 @@ std::uint64_t Scheduler::post_timer(std::string resource, int delay_ms, int repe
 {
     Timer timer;
     timer.id = impl_->next_timer_id++;
+    timer.generation = mta::resources::Hub::instance().generation(resource);
     timer.resource = std::move(resource);
     timer.interval_ms = std::max(delay_ms, minimum_timer_delay_ms);
     timer.repeats_left = repeat_count < 0 ? 0 : repeat_count;

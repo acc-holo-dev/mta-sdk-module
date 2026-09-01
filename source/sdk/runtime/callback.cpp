@@ -5,6 +5,7 @@
 #include "sdk/lua/stack.hpp"
 #include "sdk/logging/logging.hpp"
 #include "sdk/abi/module.hpp"
+#include "sdk/resources/resources.hpp"
 
 #include <unordered_map>
 #include <utility>
@@ -16,12 +17,17 @@ namespace
 struct TrackedRef
 {
     bool dead = false;
+    // The VM generation the reference was created in. A fresh VM after a
+    // restart can hand out the SAME luaL_ref index; the generation is what
+    // tells the two apart (plan §11/§12).
+    std::uint64_t generation = 0;
 };
 
 // Registry indices from luaL_ref are only unique within a single VM, and
 // every resource owns its own VM. Two resources can therefore legitimately
 // receive the SAME index, so references are keyed by resource name first:
 // equal indices in different VMs can never collide or leak into each other.
+// Within one resource, generations separate the references of successive VMs.
 using ResourceRefs = std::unordered_map<int, TrackedRef>;
 std::unordered_map<std::string, ResourceRefs> &tracked_refs()
 {
@@ -29,7 +35,7 @@ std::unordered_map<std::string, ResourceRefs> &tracked_refs()
     return refs;
 }
 
-bool ref_is_dead(const std::string &resource, int ref) noexcept
+bool ref_is_dead(const std::string &resource, int ref, std::uint64_t generation) noexcept
 {
     const auto &refs = tracked_refs();
     const auto resource_it = refs.find(resource);
@@ -38,12 +44,16 @@ bool ref_is_dead(const std::string &resource, int ref) noexcept
         return true;
     }
     const auto ref_it = resource_it->second.find(ref);
-    return ref_it == resource_it->second.end() || ref_it->second.dead;
+    return ref_it == resource_it->second.end() || ref_it->second.dead ||
+           ref_it->second.generation != generation;
 }
 
 // Removes a reference from tracking; luaL_unref is called while the
-// resource's VM is still reachable.
-void untrack_ref(const std::string &resource, int ref) noexcept
+// resource's VM is still reachable. Only the entry of the callback's OWN
+// generation is touched: a stale callback releasing itself after a restart
+// must not untrack the live reference that the fresh VM handed out for the
+// same index.
+void untrack_ref(const std::string &resource, int ref, std::uint64_t generation) noexcept
 {
     auto &refs = tracked_refs();
     const auto resource_it = refs.find(resource);
@@ -53,7 +63,7 @@ void untrack_ref(const std::string &resource, int ref) noexcept
     }
 
     const auto ref_it = resource_it->second.find(ref);
-    if (ref_it == resource_it->second.end())
+    if (ref_it == resource_it->second.end() || ref_it->second.generation != generation)
     {
         return;
     }
@@ -79,7 +89,8 @@ void untrack_ref(const std::string &resource, int ref) noexcept
 
 Callback::Callback(Callback &&other) noexcept
     : resource_(std::move(other.resource_)),
-      ref_(other.ref_)
+      ref_(other.ref_),
+      generation_(other.generation_)
 {
     other.ref_ = LUA_NOREF;
     other.resource_.clear();
@@ -92,6 +103,7 @@ Callback &Callback::operator=(Callback &&other) noexcept
         release();
         resource_ = std::move(other.resource_);
         ref_ = other.ref_;
+        generation_ = other.generation_;
         other.ref_ = LUA_NOREF;
         other.resource_.clear();
     }
@@ -120,17 +132,18 @@ Callback Callback::from_stack(lua_State *lua_vm, int index)
     lua_pushvalue(lua_vm, index);
     const int ref = luaL_ref(lua_vm, LUA_REGISTRYINDEX);
 
-    tracked_refs()[resource][ref] = TrackedRef{false};
+    tracked_refs()[resource][ref] = TrackedRef{false, mta::resources::Hub::instance().generation(resource)};
 
     Callback callback;
     callback.resource_ = resource;
     callback.ref_ = ref;
+    callback.generation_ = mta::resources::Hub::instance().generation(resource);
     return callback;
 }
 
 bool Callback::call(const mta::lua::Arguments &arguments) const
 {
-    if (!valid() || ref_is_dead(resource_, ref_))
+    if (!valid() || ref_is_dead(resource_, ref_, generation_))
     {
         return false;
     }
@@ -145,6 +158,18 @@ bool Callback::call(const mta::lua::Arguments &arguments) const
     if (vm == nullptr)
     {
         return false; // resource stopped (a restarted one would return a fresh VM)
+    }
+
+    // Second line of defense (plan §12): even with a live tracked ref, a
+    // callback of an older generation must never run in the fresh VM of a
+    // restarted resource.
+    const std::uint64_t current_generation = mta::resources::Hub::instance().generation(resource_);
+    if (current_generation != generation_)
+    {
+        mta::log::debug("callback: dropping a stale callback for resource '", resource_,
+                        "' from generation ", generation_, " (current generation ",
+                        current_generation, ")");
+        return false;
     }
 
     const int base = lua_gettop(vm);
@@ -182,9 +207,10 @@ void Callback::release() noexcept
 {
     if (ref_ != LUA_NOREF)
     {
-        untrack_ref(resource_, ref_);
+        untrack_ref(resource_, ref_, generation_);
         ref_ = LUA_NOREF;
         resource_.clear();
+        generation_ = 0;
     }
 }
 
@@ -208,9 +234,13 @@ void release_all_callbacks()
     auto &refs = tracked_refs();
     for (auto &[resource, resource_refs] : refs)
     {
+        const std::uint64_t current_generation =
+            mta::resources::Hub::instance().generation(resource);
         for (auto &[ref, tracked] : resource_refs)
         {
-            if (!tracked.dead)
+            // Only live references of the CURRENT generation still belong to
+            // a reachable VM; older generations point into dead VMs.
+            if (!tracked.dead && tracked.generation == current_generation)
             {
                 if (auto *manager = mta::module::manager())
                 {
