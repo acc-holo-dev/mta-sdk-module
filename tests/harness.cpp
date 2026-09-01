@@ -6,8 +6,8 @@
 // error translation, tables, async result delivery, timers.
 //
 // Lua-side helpers:
-//   test_assert(condition, message)  — records a pass/fail
-//   test_pump(milliseconds)          — pumps DoPulse for the given time
+//   test_assert(condition, message)  -- records a pass/fail
+//   test_pump(milliseconds)          -- pumps DoPulse for the given time
 
 #include "ILuaModuleManager10.h"
 
@@ -192,7 +192,17 @@ int test_resource_start(lua_State *lua_vm)
 
 int main()
 {
-    lua_State *lua_vm = luaL_newstate();
+    // The vendored Lua is MTA's patched 5.1: luaL_newstate takes the state's
+    // owner (mtasaowner) - nullptr for a module-owned state. Passing it lets
+    // the state be created exactly like the real server does, and the check
+    // below pins the ABI: if the module's lua headers ever drift from the
+    // compiled Lua again, this fails loudly instead of storing garbage.
+    lua_State *lua_vm = luaL_newstate(nullptr);
+    if (lua_getmtasaowner(lua_vm) != nullptr)
+    {
+        std::printf("FATAL: Lua state owner mismatch (mtasaowner must be null)\n");
+        return 2;
+    }
     luaL_openlibs(lua_vm);
 
     MockModuleManager manager;

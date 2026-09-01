@@ -234,7 +234,7 @@ void Scheduler::pump()
 
         if (timer.repeats_left > 0 && --timer.repeats_left == 0)
         {
-            continue; // repeat limit reached — drop the timer
+            continue; // repeat limit reached -- drop the timer
         }
 
         timer.next_fire = now + std::chrono::milliseconds(timer.interval_ms);

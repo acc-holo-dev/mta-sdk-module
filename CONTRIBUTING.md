@@ -48,8 +48,9 @@ plus a unity build) before opening a pull request.
 
 ## Releases
 
-- Bump the version in CMakeLists.txt (project VERSION) and
-  src/module/module.cpp (module_details); add a CHANGELOG.md entry.
+- Bump the version in CMakeLists.txt (project VERSION) only — the module
+  reports it automatically (src/module/module.cpp reads it at configure
+  time); add a CHANGELOG.md entry.
 - Pushing a tag like v1.1.0 triggers the Release workflow, which builds
   ml_base.dll / ml_base.so, packages ZIP archives and attaches everything to
   a GitHub Release (see .github/workflows/release.yml).

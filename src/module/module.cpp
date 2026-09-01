@@ -8,21 +8,30 @@
 #include "runtime/resources.hpp"
 #include "runtime/scheduler.hpp"
 
+#include <cstdlib>
 #include <cstring>
 
 namespace mta::module
 {
 namespace
 {
-constexpr Info module_details{
+#ifndef SDK_MODULE_VERSION
+#error "SDK_MODULE_VERSION is missing: derive it from project(VERSION) in CMakeLists.txt"
+#endif
+
+// Version float ("1.1" for project version 1.1.0), provided by the build
+// system so the module and the CMake package report the same version.
+const float module_version = static_cast<float>(std::atof(SDK_MODULE_VERSION));
+
+const Info module_details{
     "Base Module",
     "anon",
-    1.1F,
+    module_version,
 };
 
 ILuaModuleManager10 *g_module_manager = nullptr;
 
-// The server provides MAX_INFO_LENGTH (128 byte) buffers — copy with a
+// The server provides MAX_INFO_LENGTH (128 byte) buffers -- copy with a
 // guaranteed terminating NUL. A hand-written loop avoids both the MSVC
 // deprecation warning for strncpy and any platform-specific _s variant.
 void copy_info_string(char *destination, const char *source) noexcept

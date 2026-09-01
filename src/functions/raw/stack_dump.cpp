@@ -1,6 +1,6 @@
 // Example of direct Lua stack access, for when args<...> does not fit
 // (dynamic logic, fine-grained parsing). The body receives lua_State* L and
-// may do anything with the stack — the framework only catches exceptions.
+// may do anything with the stack -- the framework only catches exceptions.
 
 #include "lua/common.hpp"
 #include "registry/registry.hpp"

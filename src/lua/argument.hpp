@@ -1,7 +1,7 @@
 #pragma once
 
 // Snapshot of a single Lua value: nil / boolean / number / string /
-// lightuserdata and tables (recursively, up to max_table_depth levels —
+// lightuserdata and tables (recursively, up to max_table_depth levels --
 // protection against cyclic references).
 
 #include "lua/common.hpp"

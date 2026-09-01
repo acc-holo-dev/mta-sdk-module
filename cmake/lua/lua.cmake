@@ -57,9 +57,13 @@ if(SDK_LUA_WARNINGS_OFF)
   endif()
 endif()
 
-if(WIN32)
-  target_compile_definitions(mta_lua PRIVATE LUA_BUILD_AS_DLL)
-elseif(UNIX)
+# NOTE: do NOT define LUA_BUILD_AS_DLL. The Lua sources define LUA_CORE or
+# LUA_LIB, so that define would mark every Lua API function __declspec(dllexport)
+# and export the whole Lua API from the module even though Lua is linked
+# statically into it (extra exports risk symbol collisions with other modules
+# in the server process). Plain extern linkage exports exactly the six MTA
+# entry points (ml_base.def pins that list on Windows).
+if(UNIX)
   target_compile_definitions(mta_lua PRIVATE LUA_USE_LINUX)
 endif()
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// Typed binder for Lua functions — the module's main API.
+// Typed binder for Lua functions -- the module's main API.
 //
 //     MTA_LUA_FUNC("my_sum", "Adds two numbers.",
 //         [](double a, double b) { return a + b; });
@@ -371,7 +371,7 @@ constexpr bool prefix_invocable_impl(std::index_sequence<I...>)
 template <typename F, std::size_t J>
 constexpr bool prefix_invocable_v = prefix_invocable_impl<F, J>(std::make_index_sequence<J>{});
 
-// required_counts[J] — how many of the first J parameters require an explicit
+// required_counts[J] -- how many of the first J parameters require an explicit
 // Lua argument (not optional, not rest, not context).
 template <typename F, std::size_t... I>
 constexpr std::array<std::size_t, sizeof...(I) + 1> required_counts_impl(std::index_sequence<I...>)
@@ -506,7 +506,7 @@ bool register_typed(const char *name, const char *description, F function)
 }
 } // namespace detail
 
-// Reads typed arguments (1..N) as a tuple — for structured bindings:
+// Reads typed arguments (1..N) as a tuple -- for structured bindings:
 //
 //     auto [a, b] = mta::lua::args<double, double>(L);
 //

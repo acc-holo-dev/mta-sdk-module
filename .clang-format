@@ -1,5 +1,5 @@
-# Форматтер кода. Стиль близок к текущему (4 пробела, фигурные скобки
-# на новой строке, указатели справа).
+# Code formatter. The style matches the current sources (4 spaces, braces on
+# a new line, pointers aligned right).
 BasedOnStyle: LLVM
 IndentWidth: 4
 ColumnLimit: 100

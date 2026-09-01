@@ -62,11 +62,11 @@ public:
 
         luaL_newmetatable(L, type_name());
 
-        // __gc — the object destructor.
+        // __gc -- the object destructor.
         lua_pushcfunction(L, &gc_metamethod);
         lua_setfield(L, -2, "__gc");
 
-        // __index — the method table.
+        // __index -- the method table.
         lua_newtable(L);
         lua_setfield(L, -2, "__index");
 

@@ -199,7 +199,7 @@ void invalidate_resource_callbacks(const std::string &resource)
     for (auto &[ref, tracked] : resource_it->second)
     {
         (void)ref;
-        tracked.dead = true; // the VM dies right after this — no unref needed
+        tracked.dead = true; // the VM dies right after this -- no unref needed
     }
 }
 

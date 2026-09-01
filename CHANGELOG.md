@@ -6,21 +6,33 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
+### Fixed
 
-- Regression tests: timer callbacks may now create and cancel timers while
-  the scheduler dispatches the due timers (locks in the pump() safety fix).
-
-### Added
-
-- The Release workflow now also builds and attaches CPack ZIP packages
-  (module + README + LICENSE) for both platforms.
-- CONTRIBUTING.md and Dependabot (github-actions) configuration.
+- Module-facing Lua headers (vendor/mta-sdk/lua) now match the vendored MTA
+  Lua 5.1 exactly: the stock declarations of `luaL_newstate`/`luaL_newstate`
+  hid the server's extra `mtasaowner` argument, so a module-created Lua state
+  was built with an undefined owner pointer. The test harness now passes
+  `nullptr` explicitly, and CI verifies the header sets cannot drift again.
+- Export hygiene: ml_base exported the whole statically linked Lua API
+  (157 symbols) because LUA_BUILD_AS_DLL was defined while building the Lua
+  sources even though Lua is linked statically into the module. The module
+  now exports only its six MTA entry points — ml_base.def on Windows and a
+  version script on Linux pin the exact list.
+- Comment encoding: non-ASCII dashes in sources, tests and .clang-format are
+  gone, so every text file is clean ASCII/UTF-8 on any toolchain, including
+  MSVC builds without /utf-8.
 
 ### Changed
 
-- CI no longer runs on tag pushes (the Release workflow covers tags) and
-  uses actions/checkout@v5.
+- The module version is derived from the single `project()` version in
+  CMakeLists.txt instead of being hard-coded in src/module/module.cpp.
+- The win-mingw preset now enables unity builds and LTO like the other
+  presets (verified against the same MinGW-w64 toolchain).
+
+### Added
+
+- CI check that vendor/mta-sdk/lua/*.h stay byte-identical to the compiled
+  vendor/lua/src/*.h headers (guards the module/server Lua ABI).
 
 ## [1.1.0] — 2026-08-30
 

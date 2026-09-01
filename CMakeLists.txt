@@ -35,6 +35,16 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/.cache/${SDK_PLATFORM_TA
 # ---------------------------------------------------------------------------
 add_library(sdk_core OBJECT ${SDK_SOURCES})
 
+# Single source of truth for the module version: the float reported by
+# sample_version / module_details comes from project(VERSION ...) above
+# ("1.1.0" -> "1.1"), never from a hard-coded constant in module.cpp.
+if(PROJECT_VERSION MATCHES "^([0-9]+)\\.([0-9]+)")
+  set(SDK_MODULE_VERSION "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}")
+else()
+  set(SDK_MODULE_VERSION "${PROJECT_VERSION}")
+endif()
+target_compile_definitions(sdk_core PRIVATE SDK_MODULE_VERSION="${SDK_MODULE_VERSION}")
+
 target_include_directories(sdk_core
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -77,6 +87,13 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(sdk_base SHARED)
 target_link_libraries(sdk_base PRIVATE sdk_core mta_lua)
+
+# Export ONLY the six MTA entry points: everything else (Lua API, runtime
+# internals) stays private to the DLL so module symbols cannot collide with
+# other modules loaded into the server process.
+if(WIN32)
+  target_sources(sdk_base PRIVATE src/module/ml_base.def)
+endif()
 
 set_target_properties(sdk_base PROPERTIES
     OUTPUT_NAME "ml_base"

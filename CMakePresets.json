@@ -42,8 +42,8 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
-        "SDK_LTO": "OFF",
-        "SDK_UNITY": "OFF"
+        "SDK_LTO": "ON",
+        "SDK_UNITY": "ON"
       }
     },
     {

@@ -16,7 +16,7 @@
 //     MTA_LUA_FUNC("my_sum", "Adds two numbers.",
 //         [](double a, double b) { return a + b; });
 //
-// Both macros work in any .cpp under src/ — the build picks up the file and
+// Both macros work in any .cpp under src/ -- the build picks up the file and
 // registration happens automatically when the module loads.
 
 #include "lua/bind.hpp"

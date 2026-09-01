@@ -8,6 +8,8 @@
 *.hpp text eol=lf
 *.cmake text eol=lf
 CMakeLists.txt text eol=lf
+.clang-format text eol=lf
+.editorconfig text eol=lf
 *.lua text eol=lf
 *.md text eol=lf
 *.yml text eol=lf
