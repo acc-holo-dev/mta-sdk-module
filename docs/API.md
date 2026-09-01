@@ -1,4 +1,4 @@
-# API Reference — ml_base
+# API Reference — SDK module
 
 Complete description of the module's public API: registration macros,
 argument types, result types and helper functions.

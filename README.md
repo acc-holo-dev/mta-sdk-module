@@ -1,11 +1,12 @@
-# MTA:SA Lua Module — ml_base
+# MTA:SA Lua Module — SDK
 
 [![CI](https://github.com/acc-holo-dev/mta-sdk-module/actions/workflows/ci.yml/badge.svg)](https://github.com/acc-holo-dev/mta-sdk-module/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A solid foundation for [MTA:SA](https://multitheftauto.com) server modules:
-a dynamic library (ml_base.dll / ml_base.so) that the MTA server loads and
-that adds native Lua functions of its own.
+a dynamic library (base.dll / base.so by default) that the MTA server loads
+and that adds native Lua functions of its own. The binary name is
+configurable at CMake time — see [Module identity](#module-identity).
 
 Functions are written in **plain C++ with a body**; arguments are read by
 type automatically — no manual check_number, no indices, no "this is a
@@ -30,12 +31,16 @@ picked up automatically, and so is their registration.
 ## Table of contents
 
 - [Architecture](#architecture)
+- [Module identity](#module-identity)
 - [Building](#building)
 - [Server installation](#server-installation)
 - [Writing functions](#writing-functions)
 - [Argument and result types](#argument-and-result-types)
 - [Safety rules](#safety-rules)
 - [Testing](#testing)
+
+> For the full design — layers, data flows, threading rules — see
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Architecture
 
@@ -69,6 +74,27 @@ Put your own functions into domain folders inside functions/ — for example
 functions/crypto/ or functions/http/. A domain is created by simply adding a
 folder with a .cpp: the whole src/**/*.cpp tree is built automatically.
 
+## Module identity
+
+The module's public identity is three CMake cache variables — no source edits
+are ever needed to rename it:
+
+```bash
+cmake --preset win-mingw \
+    -DSDK_MODULE_NAME=my_mod \          # -> my_mod.dll / my_mod.so (default: base)
+    -DSDK_MODULE_TITLE="My Module" \    # console name (default: Base Module)
+    -DSDK_MODULE_AUTHOR="Jane Doe"      # console author (default: anon)
+```
+
+- `SDK_MODULE_NAME` — output binary name **without extension**; default
+  `base` (produces `base.dll` on Windows, `base.so` on Linux). It also names
+  the CPack ZIP and the Windows export table (module.def.in).
+- `SDK_MODULE_TITLE` / `SDK_MODULE_AUTHOR` — the name/author the server
+  shows in the console when the module loads.
+
+Set them once per configure; everything else picks them up automatically.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#6-configuration--no-source-edits-needed).
+
 ## Building
 
 Requirements: CMake ≥ 3.27, Ninja and a compiler with C++20 and std::thread
@@ -85,13 +111,15 @@ cmake --preset win-msvc && cmake --build --preset win-msvc
 cmake --preset linux-gcc && cmake --build --preset linux-gcc
 ```
 
-Artifact: `build/<preset>/module/<platform>-<arch>/ml_base.dll`
-(e.g. `module/win-x64/ml_base.dll`); the MinGW runtime is linked statically.
+Artifact: `build/<preset>/module/<platform>-<arch>/<SDK_MODULE_NAME>.dll`
+(e.g. `module/win-x64/base.dll`); the MinGW runtime is linked statically.
 
 ## Server installation
 
-1. Copy ml_base.dll into the server's mods/deathmatch/modules/.
-2. Add <module src="ml_base"/> to mtaserver.conf.
+1. Copy `base.dll` (or your `SDK_MODULE_NAME`) into the server's
+   mods/deathmatch/modules/.
+2. Add <module src="base"/> (the file name without extension) to
+   mtaserver.conf.
 3. Restart the server; the console should show
    MODULE: Loaded "Base Module" (1.10) by "anon".
 
@@ -332,5 +360,7 @@ GitHub Actions builds and tests the module on Linux (GCC) and Windows
 (MinGW-w64 and MSVC). Pushing a tag like v1.1.0 builds .dll/.so artifacts
 and attaches them to a GitHub Release — see .github/workflows/.
 
-The module name and author live in src/module/module.cpp (module_details),
-the DLL name in CMakeLists.txt (OUTPUT_NAME).
+The module title/author and binary name are configured via
+SDK_MODULE_TITLE / SDK_MODULE_AUTHOR / SDK_MODULE_NAME (see
+[Module identity](#module-identity)); the version comes from
+`project(VERSION ...)` in CMakeLists.txt.

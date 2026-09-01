@@ -1,4 +1,4 @@
-# Advanced Guides — ml_base
+# Advanced Guides — SDK module
 
 In-depth guides on non-obvious topics. For a quick start and basic recipes
 see [README.md](../README.md).

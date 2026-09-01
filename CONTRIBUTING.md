@@ -1,7 +1,7 @@
 # Contributing
 
-Thanks for improving ml_base! This short guide explains where things live and
-what conventions to keep.
+Thanks for improving the module SDK! This short guide explains where things
+live and what conventions to keep.
 
 ## Project layout
 
@@ -52,5 +52,6 @@ plus a unity build) before opening a pull request.
   reports it automatically (src/module/module.cpp reads it at configure
   time); add a CHANGELOG.md entry.
 - Pushing a tag like v1.1.0 triggers the Release workflow, which builds
-  ml_base.dll / ml_base.so, packages ZIP archives and attaches everything to
-  a GitHub Release (see .github/workflows/release.yml).
+  base.dll / base.so (whatever SDK_MODULE_NAME is set to), packages ZIP
+  archives and attaches everything to a GitHub Release (see
+  .github/workflows/release.yml).

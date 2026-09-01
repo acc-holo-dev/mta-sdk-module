@@ -23,7 +23,7 @@ cmake --preset linux-gcc
 cmake --build --preset linux-gcc
 ```
 
-Result: build/win-mingw/module/win-x64/ml_base.dll (or .so on Linux).
+Result: build/win-mingw/module/win-x64/base.dll (or .so on Linux).
 
 ## Step 3. Run the tests
 
@@ -52,17 +52,27 @@ edits needed: the build picks up new .cpp files automatically.
 
 ## Step 5. Rename the module
 
-1. In src/module/module.cpp change module_details (name, author, version).
-2. In CMakeLists.txt change OUTPUT_NAME (the DLL name).
-3. Rebuild.
+Name, author and the output binary are CMake cache variables — rename with
+one configure line, no C++ edits:
+
+```bash
+cmake --preset win-mingw \
+    -DSDK_MODULE_NAME=my_mod \          # -> my_mod.dll / my_mod.so
+    -DSDK_MODULE_TITLE="My Module" \    # console name
+    -DSDK_MODULE_AUTHOR="Jane Doe"      # console author
+cmake --build --preset win-mingw
+```
+
+Default values are `base` / `Base Module` / `anon`.
 
 ## Step 6. Install on the server
 
-1. Copy ml_base.dll into the server's mods/deathmatch/modules/.
+1. Copy `base.dll` (or your chosen name) into the server's
+   mods/deathmatch/modules/.
 2. Add to mtaserver.conf:
 
 ```xml
-<module src="ml_base"/>
+<module src="base"/>
 ```
 
 3. Restart the server. The console shows:
@@ -84,4 +94,5 @@ outputChatBox("2 + 3 = " .. my_sum(2, 3))  -- 2 + 3 = 5
 - [README.md](../README.md) — every function recipe.
 - [API.md](API.md) — the complete API reference.
 - [GUIDES.md](GUIDES.md) — advanced topics (threads, async, tables).
+- [ARCHITECTURE.md](ARCHITECTURE.md) — how the system is put together.
 - src/functions/ — live examples of every feature.
