@@ -1,7 +1,8 @@
 ; Module export table. The MTA server loader (CLuaModule) resolves these six
 ; entry points by name; everything else stays internal to the DLL so module
 ; symbols cannot collide with other modules in the server process.
-LIBRARY ml_base
+; The LIBRARY name is filled in by CMake from SDK_MODULE_NAME.
+LIBRARY @SDK_MODULE_NAME@
 EXPORTS
     InitModule
     RegisterFunctions

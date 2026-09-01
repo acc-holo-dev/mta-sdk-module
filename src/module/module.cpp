@@ -18,14 +18,23 @@ namespace
 #ifndef SDK_MODULE_VERSION
 #error "SDK_MODULE_VERSION is missing: derive it from project(VERSION) in CMakeLists.txt"
 #endif
+#ifndef SDK_MODULE_TITLE
+#error "SDK_MODULE_TITLE is missing: set it via SDK_MODULE_TITLE in CMakeLists.txt"
+#endif
+#ifndef SDK_MODULE_AUTHOR
+#error "SDK_MODULE_AUTHOR is missing: set it via SDK_MODULE_AUTHOR in CMakeLists.txt"
+#endif
 
 // Version float ("1.1" for project version 1.1.0), provided by the build
 // system so the module and the CMake package report the same version.
 const float module_version = static_cast<float>(std::atof(SDK_MODULE_VERSION));
 
+// Module identity is configured at build time (SDK_MODULE_TITLE /
+// SDK_MODULE_AUTHOR cache variables) -- renaming the module never requires
+// touching C++.
 const Info module_details{
-    "Base Module",
-    "anon",
+    SDK_MODULE_TITLE,
+    SDK_MODULE_AUTHOR,
     module_version,
 };
 

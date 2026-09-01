@@ -1,6 +1,6 @@
 # Module export list for GNU ld on Linux: only the six MTA entry points are
-# visible from ml_base.so, everything else stays local to the shared object
-# (the Windows counterpart is src/module/ml_base.def).
+# visible from the module .so, everything else stays local to the shared
+# object (the Windows counterpart is generated from src/module/module.def.in).
 {
   global:
     InitModule;

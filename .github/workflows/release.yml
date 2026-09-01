@@ -58,7 +58,8 @@ jobs:
         run: |
           set -e
           mkdir -p dist
-          cp build/${{ matrix.preset }}/module/*/ml_base.* dist/
+          MODULE_NAME="$(grep -E '^SDK_MODULE_NAME:' "build/${{ matrix.preset }}/CMakeCache.txt" | sed 's/.*=//')"
+          cp "build/${{ matrix.preset }}/module/"*"/${MODULE_NAME}."* dist/
           cp build/${{ matrix.preset }}/package/*.zip dist/
           cp LICENSE dist/
           ls -la dist/

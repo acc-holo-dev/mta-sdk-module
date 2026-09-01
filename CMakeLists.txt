@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.27)
 
-project(ml_base VERSION 1.1.0 LANGUAGES C CXX)
+# The project is the SDK template; the produced module binary is named by
+# SDK_MODULE_NAME (default "base" -> base.dll / base.so).
+project(mta_sdk_module VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,6 +19,18 @@ option(SDK_UNITY "Enable unity build" ON)
 option(SDK_LTO "Enable link-time optimization" ON)
 option(SDK_BUILD_TESTS "Build the embedded Lua test harness (sdk_tests)" ON)
 option(SDK_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
+
+# ---------------------------------------------------------------------------
+# Module identity — every knob is a plain CMake cache variable, so naming the
+# module never requires touching C++ sources.
+#
+#   cmake -DSDK_MODULE_NAME=my_mod          -> my_mod.dll / my_mod.so
+#   cmake -DSDK_MODULE_TITLE="My Module"    -> console name
+#   cmake -DSDK_MODULE_AUTHOR="Jane Doe"    -> console author
+# ---------------------------------------------------------------------------
+set(SDK_MODULE_NAME "base" CACHE STRING "Output name of the module binary, without extension (base -> base.dll / base.so)")
+set(SDK_MODULE_TITLE "Base Module" CACHE STRING "Module display name shown in the server console")
+set(SDK_MODULE_AUTHOR "anon" CACHE STRING "Module author shown in the server console")
 
 find_package(Threads REQUIRED)
 
@@ -43,7 +57,11 @@ if(PROJECT_VERSION MATCHES "^([0-9]+)\\.([0-9]+)")
 else()
   set(SDK_MODULE_VERSION "${PROJECT_VERSION}")
 endif()
-target_compile_definitions(sdk_core PRIVATE SDK_MODULE_VERSION="${SDK_MODULE_VERSION}")
+target_compile_definitions(sdk_core PRIVATE
+    SDK_MODULE_VERSION="${SDK_MODULE_VERSION}"
+    "SDK_MODULE_TITLE=\"${SDK_MODULE_TITLE}\""
+    "SDK_MODULE_AUTHOR=\"${SDK_MODULE_AUTHOR}\""
+)
 
 target_include_directories(sdk_core
     PUBLIC
@@ -83,7 +101,7 @@ if(SDK_SANITIZE)
 endif()
 
 # ---------------------------------------------------------------------------
-# The module itself: ml_base.dll / ml_base.so, loaded by the MTA server.
+# The module itself: ${SDK_MODULE_NAME}.dll / .so, loaded by the MTA server.
 # ---------------------------------------------------------------------------
 add_library(sdk_base SHARED)
 target_link_libraries(sdk_base PRIVATE sdk_core mta_lua)
@@ -92,11 +110,18 @@ target_link_libraries(sdk_base PRIVATE sdk_core mta_lua)
 # internals) stays private to the DLL so module symbols cannot collide with
 # other modules loaded into the server process.
 if(WIN32)
-  target_sources(sdk_base PRIVATE src/module/ml_base.def)
+  # The .def is generated from a template so its LIBRARY name follows
+  # SDK_MODULE_NAME automatically (it lives out of source in the build dir).
+  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/module")
+  configure_file(
+      src/module/module.def.in
+      "${CMAKE_BINARY_DIR}/module/${SDK_MODULE_NAME}.def"
+      @ONLY)
+  target_sources(sdk_base PRIVATE "${CMAKE_BINARY_DIR}/module/${SDK_MODULE_NAME}.def")
 endif()
 
 set_target_properties(sdk_base PROPERTIES
-    OUTPUT_NAME "ml_base"
+    OUTPUT_NAME "${SDK_MODULE_NAME}"
     PREFIX ""
 )
 
