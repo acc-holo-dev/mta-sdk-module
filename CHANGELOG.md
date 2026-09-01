@@ -6,6 +6,23 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Configurable module identity: `SDK_MODULE_NAME` (default `base` →
+  `base.dll` / `base.so`), `SDK_MODULE_TITLE` and `SDK_MODULE_AUTHOR` are
+  plain CMake cache variables — renaming the module no longer requires
+  editing C++ sources. The Windows export table follows the name via a
+  generated module.def (template: src/module/module.def.in).
+- docs/ARCHITECTURE.md: a full architecture document (layers, flows,
+  threading rules, configuration) for understanding the system at a glance.
+
+### Changed
+
+- The module export files were renamed to be name-neutral
+  (src/module/module.def.in, src/module/module.ver).
+- The CMake project was renamed from ml_base to mta_sdk_module (the output
+  binary name is controlled by SDK_MODULE_NAME, not the project name).
+
 ### Fixed
 
 - Module-facing Lua headers (vendor/mta-sdk/lua) now match the vendored MTA

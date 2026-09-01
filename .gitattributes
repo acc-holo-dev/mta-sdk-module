@@ -7,6 +7,9 @@
 *.h text eol=lf
 *.hpp text eol=lf
 *.cmake text eol=lf
+*.in text eol=lf
+*.def text eol=lf
+*.ver text eol=lf
 CMakeLists.txt text eol=lf
 .clang-format text eol=lf
 .editorconfig text eol=lf
