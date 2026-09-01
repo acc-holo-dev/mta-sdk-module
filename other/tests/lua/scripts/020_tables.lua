@@ -13,7 +13,7 @@ test_assert(deep.values == 1 and deep.sum == 1, "single value at the bottom")
 
 local ok, err = pcall(sample_table_stats, 42)
 test_assert(not ok, "sample_table_stats raises on non-table")
-test_assert(err and string.find(err, "must be a table", 1, true) ~= nil,
+test_assert(err == "bad argument #1 to 'sample_table_stats' (expected table, got number)",
             "error message explains the expected type")
 
 local version = sample_version()

@@ -134,3 +134,50 @@ newest last.
   that documented behavior with a table argument instead.
 - **NEXT**: PHASE 4 — binder V2 (plan §7 error format, signature metadata,
   unified error model) with same-phase test updates.
+
+## PHASE 4 — Binder V2 (error format, error model, signature metadata)
+
+- **PHASE**: 4 — argument validation per plan §7, unified error model §19,
+  registry signature metadata §9/§21.
+- **CHANGED**:
+  - `sdk/lua/stack.hpp`: all check_*/opt_* render the plan §7 format
+    `bad argument #N to '<name>' (expected <T>, got <G>)`; missing args give
+    `(expected <T>, got no value)`; whole-number/range violations render
+    `(value out of range)` / `(<value> is not a whole number)`. NIL at a
+    position reports `got nil` (distinguishes explicit nil from absence).
+  - `sdk/lua/protect.hpp`: `raise_error` now throws the unified
+    `mta::errors::Error` (Generic); the boundary renders InternalError and
+    foreign std exceptions as `internal module error: ...`; added
+    `protected_call_named` + thread-local `current_function_name` context
+    (set by every registration trampoline; purely diagnostic).
+  - `sdk/bind/bind.hpp`: Table/string_view/Callback/range errors migrated;
+    Callback params now report `(expected function, got ...)`; the
+    error_probe walks the pull order so missing/invalid positions get exact
+    messages; `holder::entry` delegates to the single protected_call boundary
+    (duplicate catch chains removed).
+  - `sdk/objects/userdata.hpp`: method trampolines name the running method;
+    `check()` reports `(expected module object, got ...)` with the
+    invalid-object category.
+  - Lua tests 010/015/020/040/050 updated in the same phase (plan rule: no
+    stale pinned behavior).
+- **ADDED**:
+  - `sdk/errors/errors.hpp` — categories per plan §19 with
+    `category_name()` for logs.
+  - Signature metadata (§9/§21): `mta::lua::ArgumentInfo`/`Signature`,
+    `Spec::signature` (+ reserved `category`, `flags`); derived
+    automatically for lambda-style; body-style explicitly `derived == false`
+    (documented underivable). New built-in `module_signature(name)`.
+  - Sample `sample_hello_len` (tuple-returning lambda) to pin metadata.
+  - `other/tests/lua/scripts/045_errors.lua` — §7 matrix (type mismatch,
+    missing at position, integer, optional, callback) + metadata checks.
+- **REMOVED**: nothing public; `mta::lua::raise` semantics preserved (now
+  Generic category).
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (sdk_tests 130 assertions).
+- **RISKS**: the name context is a thread-local set by trampolines (stays set
+  after a call — diagnostic only, overwritten by the next call); the
+  `bad argument count` fallback for exhausted probes is unreachable in
+  practice but kept well-formed; message text is now a contract — further
+  changes need a versioned migration note (PHASE 12 docs).
+- **NEXT**: PHASE 5 (P0) — ResourceContext/generation: fix the callback
+  generation-confusion bug (audit §5.1), harness fresh-VM simulation, §33
+  restart regression tests.

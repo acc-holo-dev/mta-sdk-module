@@ -25,14 +25,15 @@ test_assert(a == 1 and b == "x" and c == true, "rest_args roundtrip")
 local n, t1, t2 = sample_stack_dump(1, "x")
 test_assert(n == 2 and t1 == "number" and t2 == "string", "raw stack dump")
 
--- typing errors straight from the signature
+-- typing errors straight from the signature (plan §7 format)
 local ok, err = pcall(sample_greet, {})
 test_assert(not ok, "non-string raises")
-test_assert(err and string.find(err, "must be a string", 1, true) ~= nil,
+test_assert(err == "bad argument #1 to 'sample_greet' (expected string, got table)",
             "typed error message from signature")
 
 local ok2, err2 = pcall(sample_range, "x", 1)
-test_assert(not ok2 and string.find(err2, "must be an integer", 1, true) ~= nil,
+test_assert(not ok2 and string.find(err2, "bad argument #1 to 'sample_range'", 1, true) ~= nil
+                        and string.find(err2, "expected integer, got string", 1, true) ~= nil,
             "integer type error")
 
 -- missing required argument

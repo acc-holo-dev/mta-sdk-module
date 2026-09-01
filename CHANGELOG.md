@@ -8,6 +8,33 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Unified error model `sdk/errors/errors.hpp` (plan §19): `mta::errors::Error`
+  with categories (Generic, InvalidArgument, InvalidType, MissingArgument,
+  ResourceStopped, InvalidCallback, InvalidObject, AsyncCancelled,
+  InternalError). Internal failures render as `internal module error: ...` —
+  framework bugs can never masquerade as scripter mistakes.
+- Signature metadata (plan §9/§21): the registry stores derived
+  argument/return/variadic info per function (`Spec::signature`, derived for
+  lambda-style, explicitly not derived for body-style); new built-in
+  `module_signature(name)` exposes it; `module_functions` unchanged.
+- Argument errors carry the function name and position (plan §7):
+  `bad argument #2 to 'sample_minmax' (expected number, got no value)` /
+  `bad argument #1 to 'sample_greet' (expected string, got table)` /
+  `bad argument #1 to 'sample_range' (expected integer, got string)`.
+- New sample `sample_hello_len` (tuple-returning lambda; exercises metadata).
+- `other/tests/lua/scripts/045_errors.lua` — the plan §7 error matrix and
+  `module_signature` metadata checks.
+
+### Changed
+
+- Binder error rendering moved to the plan §7 format; the running function's
+  registered name is set by every registration trampoline (body style, lambda
+  style, userdata methods) and used in messages. Old texts
+  (`argument #N must be a ...`) replaced everywhere, including all pinned Lua
+  test assertions.
+- The protected_call boundary re-renders unexpected std exceptions as
+  internal errors; deliberate `raise_error` messages stay verbatim.
+
 - Public facade `<mta/sdk.hpp>` (plan §42/§43): the single developer-facing
   include exporting the registration macros, `mta::lua` values/stack helpers,
   async (Callback/Scheduler), per-resource state, logging, events and

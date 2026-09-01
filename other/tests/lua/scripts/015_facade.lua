@@ -15,10 +15,10 @@ test_assert(list["sample_hello_desc"] == "Greets politely.", "described form kee
 -- (numbers coerce to strings like luaL_checkstring; a table is an error)
 local ok, err = pcall(sample_hello, {1, 2})
 test_assert(not ok, "facade lambda validates argument types")
-test_assert(err and string.find(err, "must be a string", 1, true) ~= nil,
+test_assert(err == "bad argument #1 to 'sample_hello' (expected string, got table)",
             "typed error message from the facade signature")
 
 local ok2, err2 = pcall(sample_hello)
 test_assert(not ok2, "facade lambda rejects a missing argument")
-test_assert(err2 and string.find(err2, "got no value", 1, true) ~= nil,
+test_assert(err2 == "bad argument #1 to 'sample_hello' (expected string, got no value)",
             "missing-argument error message")

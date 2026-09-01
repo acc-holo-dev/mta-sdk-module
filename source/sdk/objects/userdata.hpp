@@ -96,13 +96,15 @@ public:
     {
         if (lua_type(L, index) != LUA_TUSERDATA)
         {
-            mta::lua::raise_error("argument #", index, " must be a module object, got ",
-                                  mta::lua::detail::type_name(lua_type(L, index)));
+            mta::lua::detail::bad_argument_type(index, "module object",
+                                                mta::lua::detail::type_name(lua_type(L, index)));
         }
 
         if (lua_getmetatable(L, index) == 0)
         {
-            mta::lua::raise_error("argument #", index, " is not a module object");
+            mta::errors::raise_error(
+                ::mta::errors::Category::InvalidObject, "bad argument #", index, " (expected "
+                "module object, got object without a metatable)");
         }
         luaL_getmetatable(L, type_name());
         const bool matches = lua_rawequal(L, -1, -2) != 0;
@@ -110,7 +112,9 @@ public:
 
         if (!matches)
         {
-            mta::lua::raise_error("argument #", index, " is not a module object");
+            mta::errors::raise_error(::mta::errors::Category::InvalidObject,
+                                     "bad argument #", index, " (expected module object, got "
+                                                             "object of another type)");
         }
 
         return static_cast<T *>(lua_touserdata(L, index));
@@ -122,6 +126,7 @@ public:
     {
         ensure(L);
         method_holder<Tag, F>::fn = std::move(fn);
+        method_holder<Tag, F>::registered_name = name;
 
         luaL_getmetatable(L, type_name());
         lua_getfield(L, -1, "__index");
@@ -156,22 +161,20 @@ private:
     struct method_holder
     {
         static inline F fn{};
+        static inline const char *registered_name = nullptr;
 
-        static int trampoline(lua_State *L)
+        static int trampoline(lua_State *L) noexcept
         {
-            try
-            {
-                T *self = Registry<T>::check(L, 1);
-                return invoke_method(L, self, fn);
-            }
-            catch (const std::exception &e)
-            {
-                return luaL_error(L, "%s", e.what());
-            }
-            catch (...)
-            {
-                return luaL_error(L, "unknown C++ exception in method");
-            }
+            // Name the running method: argument errors render
+            // "bad argument #2 to 'set' (expected number, got string)".
+            mta::lua::detail::current_function_name() = registered_name;
+            return mta::lua::protected_call(L, &method_holder<Tag, F>::call);
+        }
+
+        static int call(lua_State *L)
+        {
+            T *self = Registry<T>::check(L, 1);
+            return invoke_method(L, self, fn);
         }
     };
 

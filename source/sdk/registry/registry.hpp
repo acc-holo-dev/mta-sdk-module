@@ -22,6 +22,8 @@
 #include "sdk/bind/bind.hpp"
 
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <vector>
 
 class ILuaModuleManager10;
@@ -36,6 +38,17 @@ struct Spec
     const char *name;
     const char *description;
     module_function function;
+
+    // Derived for lambda-style registrations; empty (derived == false) for
+    // body-style ones -- plan §9: underivable metadata is stated explicitly.
+    mta::lua::Signature signature{};
+
+    // Free-form grouping; empty unless a future registration spelling
+    // provides it.
+    std::string category{};
+
+    // Reserved for binder capabilities (e.g. coroutine support).
+    std::uint32_t flags = 0;
 };
 
 class Registry
@@ -69,7 +82,7 @@ private:
 
 // --- body style (main) ---------------------------------------------------------
 
-#define MTA_LUA_FUNCTION_IMPL(Name, Description, Counter)     static int MTA_CAT(mta_body_, Counter)(lua_State * L);     [[maybe_unused]] static const bool MTA_CAT(mta_registered_, Counter) =         ::mta::lua::detail::register_function(             (Name), (Description),             +[](lua_State * L) -> int {                 return ::mta::lua::protected_call(L, &MTA_CAT(mta_body_, Counter));             });     static int MTA_CAT(mta_body_, Counter)(lua_State * L)
+#define MTA_LUA_FUNCTION_IMPL(Name, Description, Counter)     static int MTA_CAT(mta_body_, Counter)(lua_State * L);     [[maybe_unused]] static const bool MTA_CAT(mta_registered_, Counter) =         ::mta::lua::detail::register_function(             (Name), (Description),             +[](lua_State * L) -> int {                 return ::mta::lua::protected_call_named(L, &MTA_CAT(mta_body_, Counter), (Name));             });     static int MTA_CAT(mta_body_, Counter)(lua_State * L)
 
 // MTA_LUA_FUNCTION("name", "description") { body; arguments via args<...> }
 #define MTA_LUA_FUNCTION(Name, Description)     MTA_LUA_FUNCTION_IMPL((Name), (Description), __COUNTER__)

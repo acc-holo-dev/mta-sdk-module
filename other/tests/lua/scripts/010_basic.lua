@@ -6,8 +6,8 @@ test_assert(sample_add(-1.5, 0.5) == -1.0, "sample_add with floats")
 
 local ok, err = pcall(sample_add, "x", 1)
 test_assert(not ok, "sample_add raises a Lua error on bad type")
-test_assert(err and string.find(err, "must be a number", 1, true) ~= nil,
-            "error message explains the expected type")
+test_assert(err == "bad argument #1 to 'sample_add' (expected number, got string)",
+            "plan §7 error format with function name, position and types")
 
 local a, b, c = sample_echo(1, "two", true)
 test_assert(a == 1 and b == "two" and c == true, "sample_echo returns scalars unchanged")

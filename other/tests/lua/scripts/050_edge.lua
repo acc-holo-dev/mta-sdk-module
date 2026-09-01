@@ -6,7 +6,8 @@ test_assert(sample_add(1, 2, 3, 4) == 3, "extra arguments ignored")
 -- nil instead of a number -> readable error
 local ok, err = pcall(sample_add, nil, 1)
 test_assert(not ok, "nil for number raises")
-test_assert(err and string.find(err, "must be a number", 1, true) ~= nil, "nil error message")
+test_assert(err == "bad argument #1 to 'sample_add' (expected number, got nil)",
+            "nil error message")
 
 -- single-element range
 local single = {sample_range(5, 5)}
@@ -28,7 +29,8 @@ test_assert(sample_tag("x", nil) == "x/none", "explicit nil -> nullopt")
 -- missing required argument
 local ok3, err3 = pcall(sample_minmax, 5)
 test_assert(not ok3, "missing required argument raises")
-test_assert(err3 and string.find(err3, "got no value", 1, true) ~= nil, "missing arg message")
+test_assert(err3 == "bad argument #2 to 'sample_minmax' (expected number, got no value)",
+            "missing arg message (plan §7)")
 
 -- cancelling a nonexistent timer
 test_assert(sample_timer_cancel(999999) == false, "cancel nonexistent timer returns false")

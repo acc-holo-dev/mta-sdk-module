@@ -73,6 +73,24 @@ struct context
     std::string resource;
 };
 
+// Signature metadata for one parameter (plan §9).
+struct ArgumentInfo
+{
+    std::string type;
+    bool optional = false;
+};
+
+// Signature metadata of a registered function (plan §9/§21). `derived` is
+// false when the metadata could not be derived from C++ (body-style
+// functions: the types live inside the body).
+struct Signature
+{
+    std::vector<ArgumentInfo> arguments;
+    std::vector<std::string> returns; // empty = returns nothing / unknown
+    bool variadic = false;            // trailing rest_args parameter
+    bool derived = false;
+};
+
 namespace detail
 {
 // --- callable signature -------------------------------------------------------
@@ -141,6 +159,129 @@ template <typename T>
 inline constexpr bool is_required_param_v =
     !is_optional_v<T> && !is_rest_v<T> && !std::is_same_v<T, context>;
 
+// Result container traits (used by the result pusher and by the signature
+// metadata below).
+template <typename T>
+struct is_tuple_like : std::false_type
+{
+};
+template <typename... Ts>
+struct is_tuple_like<std::tuple<Ts...>> : std::true_type
+{
+};
+template <typename A, typename B>
+struct is_tuple_like<std::pair<A, B>> : std::true_type
+{
+};
+
+template <typename T>
+struct is_vector : std::false_type
+{
+};
+template <typename T, typename A>
+struct is_vector<std::vector<T, A>> : std::true_type
+{
+};
+
+// --- signature metadata ----------------------------------------------------------
+
+// Lua-facing name of a parameter type (plan §9): used for error messages and
+// for the registry's signature metadata. Returns the name the binder's
+// checkers actually report; unsupported types map to "value".
+template <typename T>
+consteval const char *lua_type_name()
+{
+    using U = std::remove_cvref_t<T>;
+    if constexpr (std::is_same_v<U, bool>)
+        return "boolean";
+    else if constexpr (std::is_same_v<U, mta::async::Callback>)
+        return "function";
+    else if constexpr (std::is_floating_point_v<U>)
+        return "number";
+    else if constexpr (std::is_integral_v<U>)
+        return "integer";
+    else if constexpr (std::is_same_v<U, std::string> || std::is_same_v<U, std::string_view>)
+        return "string";
+    else if constexpr (std::is_same_v<U, Table>)
+        return "table";
+    else if constexpr (std::is_same_v<U, Argument> || std::is_same_v<U, Arguments>)
+        return "any";
+    else if constexpr (is_optional_v<U>)
+        return lua_type_name<typename U::value_type>();
+    else
+        return "value";
+}
+
+template <typename T>
+void fill_argument_info(Signature &signature)
+{
+    using U = std::remove_cvref_t<T>;
+    if constexpr (std::is_same_v<U, context>)
+    {
+        // context takes no Lua argument: not part of the signature.
+    }
+    else if constexpr (std::is_same_v<U, rest_args>)
+    {
+        signature.variadic = true;
+    }
+    else
+    {
+        signature.arguments.push_back(
+            ArgumentInfo{std::string(lua_type_name<U>()), is_optional_v<U>});
+    }
+}
+
+template <typename T>
+void fill_return_type(std::vector<std::string> &returns)
+{
+    using U = std::remove_cvref_t<T>;
+    if constexpr (std::is_void_v<U>)
+    {
+        // returns nothing
+    }
+    else if constexpr (is_vector<U>::value)
+    {
+        returns.push_back(lua_type_name<typename U::value_type>());
+        returns.push_back("...");
+    }
+    else if constexpr (is_tuple_like<U>::value)
+    {
+        [&returns]<std::size_t... I>(std::index_sequence<I...>) {
+            (returns.push_back(lua_type_name<std::tuple_element_t<I, U>>()), ...);
+        }(std::make_index_sequence<std::tuple_size_v<U>>{});
+    }
+    else if constexpr (is_optional_v<U>)
+    {
+        returns.push_back(std::string(lua_type_name<typename U::value_type>()) + " or nil");
+    }
+    else if constexpr (std::is_same_v<U, Arguments>)
+    {
+        returns.push_back("...");
+    }
+    else
+    {
+        returns.push_back(lua_type_name<U>());
+    }
+}
+
+template <typename F, std::size_t... I>
+Signature signature_impl(std::index_sequence<I...>)
+{
+    Signature signature;
+    signature.derived = true;
+    (fill_argument_info<std::remove_cvref_t<std::tuple_element_t<I, typename callable_traits<F>::args>>>(
+         signature),
+     ...);
+    fill_return_type<typename callable_traits<F>::result>(signature.returns);
+    return signature;
+}
+
+template <typename F>
+Signature signature_of()
+{
+    return signature_impl<F>(std::make_index_sequence<callable_traits<F>::arity>{});
+}
+
 // --- reading a single argument --------------------------------------------------
 
 template <typename T>
@@ -157,17 +298,31 @@ T pull_arg(lua_State *L, int index)
     else if constexpr (std::is_same_v<U, Table>)
     {
         const int normalized = normalize_index(L, index);
+        const int type_value = lua_type(L, normalized);
+        if (type_value == LUA_TNONE)
+        {
+            detail::bad_argument_missing(index, "table");
+        }
+        if (type_value != LUA_TTABLE)
+        {
+            detail::bad_argument_type(index, "table", detail::type_name(type_value));
+        }
         Argument value;
         value.read(L, normalized);
-        if (!value.is_table())
-        {
-            raise_error("argument #", index, " must be a table, got ",
-                        type_name(lua_type(L, normalized)));
-        }
         return std::move(value.as_table());
     }
     else if constexpr (std::is_same_v<U, mta::async::Callback>)
     {
+        const int normalized = normalize_index(L, index);
+        const int type_value = lua_type(L, normalized);
+        if (type_value == LUA_TNONE)
+        {
+            detail::bad_argument_missing(index, "function");
+        }
+        if (type_value != LUA_TFUNCTION)
+        {
+            detail::bad_argument_type(index, "function", detail::type_name(type_value));
+        }
         return mta::async::Callback::from_stack(L, index);
     }
     else if constexpr (is_optional_v<U>)
@@ -198,10 +353,14 @@ T pull_arg(lua_State *L, int index)
     {
         // The string lives in Lua until the call ends; no copy is needed.
         const int normalized = normalize_index(L, index);
+        const int type_value = lua_type(L, normalized);
+        if (type_value == LUA_TNONE)
+        {
+            detail::bad_argument_missing(index, "string");
+        }
         if (lua_isstring(L, normalized) == 0)
         {
-            raise_error("argument #", index, " must be a string, got ",
-                        type_name(lua_type(L, normalized)));
+            detail::bad_argument_type(index, "string", detail::type_name(type_value));
         }
         std::size_t length = 0;
         const char *text = lua_tolstring(L, normalized, &length);
@@ -224,7 +383,7 @@ T pull_arg(lua_State *L, int index)
             if (value < 0 || static_cast<std::uint64_t>(value) >
                                  static_cast<std::uint64_t>(std::numeric_limits<U>::max()))
             {
-                raise_error("argument #", index, " is out of range");
+                detail::bad_argument_value(index, "value out of range");
             }
         }
         else
@@ -232,7 +391,7 @@ T pull_arg(lua_State *L, int index)
             if (value < static_cast<lua_Integer>(std::numeric_limits<U>::min()) ||
                 value > static_cast<lua_Integer>(std::numeric_limits<U>::max()))
             {
-                raise_error("argument #", index, " is out of range");
+                detail::bad_argument_value(index, "value out of range");
             }
         }
         return static_cast<U>(value);
@@ -263,28 +422,6 @@ T pull_param(lua_State *L, std::size_t &index)
 }
 
 // --- result layout --------------------------------------------------------------
-
-template <typename T>
-struct is_tuple_like : std::false_type
-{
-};
-template <typename... Ts>
-struct is_tuple_like<std::tuple<Ts...>> : std::true_type
-{
-};
-template <typename A, typename B>
-struct is_tuple_like<std::pair<A, B>> : std::true_type
-{
-};
-
-template <typename T>
-struct is_vector : std::false_type
-{
-};
-template <typename T, typename A>
-struct is_vector<std::vector<T, A>> : std::true_type
-{
-};
 
 template <typename T>
 int push_result(lua_State *L, T &&value)
@@ -425,6 +562,7 @@ template <std::size_t Tag, typename F>
 struct holder
 {
     static inline F stored{};
+    static inline const char *registered_name = nullptr;
 
     using traits = callable_traits<F>;
     static constexpr std::size_t arity = traits::arity;
@@ -436,28 +574,25 @@ struct holder
 
     static int entry(lua_State *L) noexcept
     {
-        try
+        // Name the running function once per call: argument errors render
+        // "bad argument #N to '<name>' (expected ..., got ...)".
+        detail::current_function_name() = registered_name;
+        return protected_call(L, &holder<Tag, F>::dispatch);
+    }
+
+    static int dispatch(lua_State *L)
+    {
+        const std::size_t k = static_cast<std::size_t>(lua_gettop(L));
+        for (std::size_t J = arity + 1; J-- > 0;)
         {
-            const std::size_t k = static_cast<std::size_t>(lua_gettop(L));
-            for (std::size_t J = arity + 1; J-- > 0;)
+            if (table[J].invocable && required_counts[J] <= k)
             {
-                if (table[J].invocable && required_counts[J] <= k)
-                {
-                    return table[J].invoke(L);
-                }
+                return table[J].invoke(L);
             }
-            // No arity matched: the first required parameter will produce a
-            // typed "got no value"/"got nil" error.
-            return error_probe(L);
         }
-        catch (const std::exception &e)
-        {
-            return luaL_error(L, "%s", e.what());
-        }
-        catch (...)
-        {
-            return luaL_error(L, "unknown C++ exception in module function");
-        }
+        // No arity matched: the first missing/invalid parameter in pull order
+        // produces the typed error.
+        return error_probe(L);
     }
 
     // Reads every parameter just to produce a readable error; synthesized
@@ -470,7 +605,18 @@ struct holder
             ((void)pull_param<std::remove_cvref_t<std::tuple_element_t<I, args_type>>>(L, index),
              ...);
         }(std::make_index_sequence<arity>{});
-        raise_error("missing required arguments");
+        // Every parameter pulled successfully (optionals synthesized) yet no
+        // arity matched: report the count itself.
+        if (const char *name = detail::current_function_name())
+        {
+            ::mta::errors::raise_error(
+                ::mta::errors::Category::InvalidArgument, "bad argument count to '", name,
+                "' (expected at least ", required_counts[arity], " arguments, got ", lua_gettop(L),
+                ")");
+        }
+        ::mta::errors::raise_error(::mta::errors::Category::InvalidArgument,
+                                   "bad argument count (expected at least ", required_counts[arity],
+                                   " arguments, got ", lua_gettop(L), ")");
     }
 };
 
@@ -491,7 +637,8 @@ constexpr bool rest_only_last_v = rest_only_last_impl<F>(
     std::make_index_sequence<callable_traits<F>::arity>{});
 
 // Adds a function to the registry (implemented in registry/registry.cpp).
-bool register_function(const char *name, const char *description, int (*entry)(lua_State *));
+bool register_function(const char *name, const char *description, int (*entry)(lua_State *),
+                       const Signature &signature = {});
 
 // Registers a typed function; Tag is a unique number per call site.
 template <std::size_t Tag, typename F>
@@ -502,7 +649,8 @@ bool register_typed(const char *name, const char *description, F function)
     static_assert(rest_only_last_v<G>, "rest_args may only be the last parameter");
 
     holder<Tag, G>::stored = std::move(function);
-    return register_function(name, description, &holder<Tag, G>::entry);
+    holder<Tag, G>::registered_name = name;
+    return register_function(name, description, &holder<Tag, G>::entry, signature_of<G>());
 }
 } // namespace detail
 

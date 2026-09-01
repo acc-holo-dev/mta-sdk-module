@@ -41,13 +41,16 @@ namespace mta::lua::detail
 {
 // Bridge from the binder into the registry; implemented here so bind.hpp
 // does not drag the registry internals along.
-bool register_function(const char *name, const char *description, int (*entry)(lua_State *))
+bool register_function(const char *name, const char *description, int (*entry)(lua_State *),
+                       const Signature &signature)
 {
     if (name == nullptr || entry == nullptr)
     {
         return false;
     }
-    mta::registry::Registry::instance().add(mta::registry::Spec{name, description, entry});
+    mta::registry::Spec spec{name, description, entry};
+    spec.signature = signature;
+    mta::registry::Registry::instance().add(std::move(spec));
     return true;
 }
 } // namespace mta::lua::detail

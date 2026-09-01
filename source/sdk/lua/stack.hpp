@@ -6,9 +6,14 @@
 // calling luaL_error directly, so local C++ objects are destroyed properly on
 // bad arguments. The push helpers grow the stack safely via lua_checkstack.
 //
-// Inside MTA_LUA_FUNCTION:
-//     const double a = mta::lua::check_number(L, 1);
-//     return mta::lua::push_results(L, a + b);
+// Error format (plan §7): while a registered module function runs, argument
+// errors carry its name --
+//
+//     bad argument #2 to 'sum' (expected number, got no value)
+//     bad argument #1 to 'sum' (expected number, got string)
+//
+// Outside a module call the name part is omitted. Numbers coerce to strings
+// (luaL_checkstring semantics); everything else is a hard type error.
 
 #include "sdk/lua/common.hpp"
 #include "sdk/lua/protect.hpp"
@@ -45,6 +50,43 @@ namespace detail
     default: return "unknown";
     }
 }
+
+// Renders "bad argument #N to 'name' (expected EXPECTED, got GOT)"; the
+// function name part is omitted when the diagnostic context is unset.
+[[noreturn]] inline void bad_argument(int index, const char *expected, const char *got,
+                                      ::mta::errors::Category category)
+{
+    if (const char *name = current_function_name())
+    {
+        ::mta::errors::raise_error(category, "bad argument #", index, " to '", name,
+                                   "' (expected ", expected, ", got ", got, ")");
+    }
+    ::mta::errors::raise_error(category, "bad argument #", index, " (expected ", expected,
+                               ", got ", got, ")");
+}
+
+[[noreturn]] inline void bad_argument_type(int index, const char *expected, const char *got)
+{
+    bad_argument(index, expected, got, ::mta::errors::Category::InvalidType);
+}
+
+[[noreturn]] inline void bad_argument_missing(int index, const char *expected)
+{
+    bad_argument(index, expected, "no value", ::mta::errors::Category::MissingArgument);
+}
+
+// "bad argument #N to 'name' (DETAIL)" for constraint violations that are not
+// plain type mismatches (value ranges, whole numbers).
+[[noreturn]] inline void bad_argument_value(int index, const char *detail_text)
+{
+    if (const char *name = current_function_name())
+    {
+        ::mta::errors::raise_error(::mta::errors::Category::InvalidType, "bad argument #", index,
+                                   " to '", name, "' (", detail_text, ")");
+    }
+    ::mta::errors::raise_error(::mta::errors::Category::InvalidType, "bad argument #", index, " (",
+                               detail_text, ")");
+}
 } // namespace detail
 
 [[nodiscard]] inline int arg_count(lua_State *L) noexcept
@@ -57,10 +99,14 @@ namespace detail
 [[nodiscard]] inline double check_number(lua_State *L, int index)
 {
     const int normalized = detail::normalize_index(L, index);
-    if (lua_type(L, normalized) != LUA_TNUMBER)
+    const int type_value = lua_type(L, normalized);
+    if (type_value == LUA_TNONE)
     {
-        raise_error("argument #", index, " must be a number, got ",
-                    detail::type_name(lua_type(L, normalized)));
+        detail::bad_argument_missing(index, "number");
+    }
+    if (type_value != LUA_TNUMBER)
+    {
+        detail::bad_argument_type(index, "number", detail::type_name(type_value));
     }
     return lua_tonumber(L, normalized);
 }
@@ -75,8 +121,7 @@ namespace detail
     }
     if (type_value != LUA_TNUMBER)
     {
-        raise_error("argument #", index, " must be a number or nil, got ",
-                    detail::type_name(type_value));
+        detail::bad_argument_type(index, "number or nil", detail::type_name(type_value));
     }
     return lua_tonumber(L, normalized);
 }
@@ -84,15 +129,20 @@ namespace detail
 [[nodiscard]] inline lua_Integer check_integer(lua_State *L, int index)
 {
     const int normalized = detail::normalize_index(L, index);
-    if (lua_type(L, normalized) != LUA_TNUMBER)
+    const int type_value = lua_type(L, normalized);
+    if (type_value == LUA_TNONE)
     {
-        raise_error("argument #", index, " must be an integer, got ",
-                    detail::type_name(lua_type(L, normalized)));
+        detail::bad_argument_missing(index, "integer");
+    }
+    if (type_value != LUA_TNUMBER)
+    {
+        detail::bad_argument_type(index, "integer", detail::type_name(type_value));
     }
     const lua_Number value = lua_tonumber(L, normalized);
     if (value != static_cast<lua_Number>(static_cast<lua_Integer>(value)))
     {
-        raise_error("argument #", index, " must be a whole number, got ", value);
+        detail::bad_argument_value(index, std::to_string(value).append(" is not a whole number")
+                                                   .c_str());
     }
     return static_cast<lua_Integer>(value);
 }
@@ -107,13 +157,13 @@ namespace detail
     }
     if (type_value != LUA_TNUMBER)
     {
-        raise_error("argument #", index, " must be an integer or nil, got ",
-                    detail::type_name(type_value));
+        detail::bad_argument_type(index, "integer or nil", detail::type_name(type_value));
     }
     const lua_Number value = lua_tonumber(L, normalized);
     if (value != static_cast<lua_Number>(static_cast<lua_Integer>(value)))
     {
-        raise_error("argument #", index, " must be a whole number, got ", value);
+        detail::bad_argument_value(index, std::to_string(value).append(" is not a whole number")
+                                                   .c_str());
     }
     return static_cast<lua_Integer>(value);
 }
@@ -121,10 +171,14 @@ namespace detail
 [[nodiscard]] inline bool check_boolean(lua_State *L, int index)
 {
     const int normalized = detail::normalize_index(L, index);
-    if (lua_type(L, normalized) != LUA_TBOOLEAN)
+    const int type_value = lua_type(L, normalized);
+    if (type_value == LUA_TNONE)
     {
-        raise_error("argument #", index, " must be a boolean, got ",
-                    detail::type_name(lua_type(L, normalized)));
+        detail::bad_argument_missing(index, "boolean");
+    }
+    if (type_value != LUA_TBOOLEAN)
+    {
+        detail::bad_argument_type(index, "boolean", detail::type_name(type_value));
     }
     return lua_toboolean(L, normalized) != 0;
 }
@@ -139,8 +193,7 @@ namespace detail
     }
     if (type_value != LUA_TBOOLEAN)
     {
-        raise_error("argument #", index, " must be a boolean or nil, got ",
-                    detail::type_name(type_value));
+        detail::bad_argument_type(index, "boolean or nil", detail::type_name(type_value));
     }
     return lua_toboolean(L, normalized) != 0;
 }
@@ -149,10 +202,14 @@ namespace detail
 [[nodiscard]] inline std::string check_string(lua_State *L, int index)
 {
     const int normalized = detail::normalize_index(L, index);
+    const int type_value = lua_type(L, normalized);
+    if (type_value == LUA_TNONE)
+    {
+        detail::bad_argument_missing(index, "string");
+    }
     if (lua_isstring(L, normalized) == 0)
     {
-        raise_error("argument #", index, " must be a string, got ",
-                    detail::type_name(lua_type(L, normalized)));
+        detail::bad_argument_type(index, "string", detail::type_name(type_value));
     }
     std::size_t length = 0;
     const char *text = lua_tolstring(L, normalized, &length);
@@ -169,8 +226,7 @@ namespace detail
     }
     if (lua_isstring(L, normalized) == 0)
     {
-        raise_error("argument #", index, " must be a string or nil, got ",
-                    detail::type_name(type_value));
+        detail::bad_argument_type(index, "string or nil", detail::type_name(type_value));
     }
     std::size_t length = 0;
     const char *text = lua_tolstring(L, normalized, &length);
@@ -180,10 +236,14 @@ namespace detail
 [[nodiscard]] inline void *check_light_userdata(lua_State *L, int index)
 {
     const int normalized = detail::normalize_index(L, index);
-    if (lua_type(L, normalized) != LUA_TLIGHTUSERDATA)
+    const int type_value = lua_type(L, normalized);
+    if (type_value == LUA_TNONE)
     {
-        raise_error("argument #", index, " must be userdata, got ",
-                    detail::type_name(lua_type(L, normalized)));
+        detail::bad_argument_missing(index, "userdata");
+    }
+    if (type_value != LUA_TLIGHTUSERDATA)
+    {
+        detail::bad_argument_type(index, "userdata", detail::type_name(type_value));
     }
     return lua_touserdata(L, normalized);
 }

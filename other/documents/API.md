@@ -38,8 +38,10 @@ auto [a, b] = mta::lua::args<double, double>(L);
 
 Reads arguments 1..N from the stack, by the types in the template list, and
 returns a std::tuple (for structured bindings). Every type is checked
-automatically: on mismatch an error argument #N must be <type>, got <actual>
-is thrown. Extra arguments are ignored, missing ones give …got no value.
+automatically: on mismatch the error has the plan §7 format
+`bad argument #N to '<function>' (expected <type>, got <actual>)`.
+Extra arguments are ignored; missing ones give
+`(expected <type>, got no value)` at the missing position.
 
 ### Argument types
 
@@ -173,6 +175,13 @@ template<typename... A> [[noreturn]] void raise_error(A&&... args);  // streamed
 Any C++ exception inside a module function is turned into a Lua error by the
 mta::lua::protected_call trampoline. The server process is protected from
 exceptions.
+
+Unified error model (plan §19) — mta::errors::Error carries a category:
+Generic (deliberate module error, rendered verbatim), InvalidArgument,
+InvalidType, MissingArgument, ResourceStopped, InvalidCallback,
+InvalidObject, AsyncCancelled, InternalError. The InternalError category and
+any non-mta exception render as `internal module error: ...`, so a framework
+bug never looks like a scripter mistake. Categories: see sdk/errors/errors.hpp.
 
 ## mta::async::Callback
 
