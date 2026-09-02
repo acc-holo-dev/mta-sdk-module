@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Definition-of-done sweep (plan §50): the `source/library/` layer now
+  exists with real content — `library/base/handle_map.hpp`
+  (`mta::library::base::HandleMap<Id, Handle>`), the id → handle registry
+  the async-task and timer samples use for their Lua-facing handle
+  bookkeeping (both migrated off hand-rolled `unordered_map` flows); the
+  layer direction (`functions → library → sdk`, never back up) is
+  documented in architecture.md.
 - Release pipeline rework (plan PHASE 14) in `.github/workflows/release.yml`:
   the matrix now covers `linux-gcc`, `win-mingw` and `win-msvc`; every leg
   builds, runs the unit + lua suites through the CLI, runs the real-server

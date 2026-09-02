@@ -6,19 +6,20 @@
 
 #include <mta/sdk.hpp>
 
+#include <library/base/handle_map.hpp>
+
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <thread>
-#include <unordered_map>
 #include <utility>
 
 namespace
 {
 // Live task handles of the calling resource (main thread only; cleared when
-// the resource stops).
-using TaskMap = std::unordered_map<std::uint64_t, mta::async::Task>;
-mta::resources::Store<TaskMap> g_tasks;
+// the resource stops). HandleMap is the reusable id->handle registry from
+// the library layer (plan §23: functions may use library).
+mta::resources::Store<mta::library::base::HandleMap<std::uint64_t, mta::async::Task>> g_tasks;
 } // namespace
 
 MTA_LUA_FUNCTION("sample_task_run",
@@ -53,7 +54,10 @@ MTA_LUA_FUNCTION("sample_task_run",
     }
 
     const std::uint64_t id = task.id();
-    g_tasks.for_state(L).emplace(id, std::move(task));
+    if (!g_tasks.for_state(L).emplace(id, std::move(task)))
+    {
+        mta::log::error("sample_task_run: duplicate task id ", id);
+    }
     return mta::lua::push_results(L, static_cast<lua_Number>(id));
 }
 
@@ -62,14 +66,14 @@ MTA_LUA_FUNCTION("sample_task_cancel",
 {
     auto [id] = mta::lua::args<std::int64_t>(L);
 
-    auto &tasks = g_tasks.for_state(L);
-    const auto it = tasks.find(static_cast<std::uint64_t>(id));
-    if (it == tasks.end())
+    auto *tasks = &g_tasks.for_state(L);
+    mta::async::Task *task = tasks->find(static_cast<std::uint64_t>(id));
+    if (task == nullptr)
     {
         return mta::lua::push_results(L, false);
     }
 
-    const bool cancelled = it->second.cancel();
-    tasks.erase(it);
+    const bool cancelled = task->cancel();
+    tasks->erase(static_cast<std::uint64_t>(id));
     return mta::lua::push_results(L, cancelled);
 }

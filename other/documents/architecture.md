@@ -37,6 +37,7 @@ headers are byte-compared against the vendored Lua in the tests).
 config/module.toml          single source of truth (identity/build/features)
 source/mta/sdk.hpp          the public facade (the only include you need)
 source/sdk/                 the framework (internal layers, see §3)
+source/library/             reusable module-agnostic utilities (plan §23)
 source/functions/           the bundled sample module (your code goes here)
 other/third_party/          vendored Lua 5.1 + MTA SDK headers
 other/tests/                unit tests + embedded-Lua harness + scripts
@@ -49,9 +50,10 @@ CMakePresets.json           win-msvc / win-mingw / linux-gcc / base
 
 ---
 
-## 3. The layers of `source/sdk/`
+## 3. The layers of `source/`
 
-Dependencies point **downward only**.
+Dependencies point **downward only** (`functions → library → sdk`; a
+dependency from `sdk` up into `functions` or `library` is forbidden).
 
 ```text
         ┌──────────────────────────┐
@@ -59,6 +61,10 @@ Dependencies point **downward only**.
         │   your Lua functions     │
         └────────────┬─────────────┘
                      │ MTA_FUNCTION / MTA_LUA_FUNCTION / MTA_LUA_FUNC
+        ┌────────────▼─────────────┐
+        │   library/               │  ← reusable utilities shared by
+        │   (plan §23, see §3.0)   │     several functions
+        └────────────┬─────────────┘
         ┌────────────▼─────────────┐
         │   registry/              │  ← collects + registers functions,
         │   Registry, Spec, macros │     replays them into every VM
@@ -78,6 +84,17 @@ Dependencies point **downward only**.
                             ▼
         other/third_party/ (Lua 5.1, MTA SDK headers)
 ```
+
+### 3.0 `source/library/` — reusable utilities (plan §23)
+
+Module-agnostic C++ that does not export to Lua directly and can be shared
+by several functions (`library` must never depend on a specific function
+implementation). The bundled module ships `library/base/handle_map.hpp`
+(`mta::library::base::HandleMap<Id, Handle>`) — the id → handle registry
+used by the async-task and timer samples for their Lua-facing handle
+bookkeeping. A library unit is plain C++ (no Lua types required); add a
+subfolder per domain (`library/http/`, `library/json/`, ...) when real
+reusable code appears.
 
 ### 3.1 `source/sdk/abi/` — the MTA contract
 

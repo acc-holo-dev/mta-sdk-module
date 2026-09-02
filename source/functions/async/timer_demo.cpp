@@ -8,25 +8,18 @@
 
 #include <mta/sdk.hpp>
 
+#include <library/base/handle_map.hpp>
+
 #include <cstdint>
 #include <memory>
-#include <unordered_map>
 #include <utility>
 
 namespace
 {
 // Live timer handles of the calling resource (main thread only; cleared
-// when the resource stops).
-using TimerMap = std::unordered_map<std::uint64_t, mta::timer::Timer>;
-mta::resources::Store<TimerMap> g_timers;
-
-// Finds the handle of the calling resource; nullptr when unknown.
-mta::timer::Timer *find_timer(lua_State *L, std::uint64_t id)
-{
-    auto &timers = g_timers.for_state(L);
-    const auto it = timers.find(id);
-    return it == timers.end() ? nullptr : &it->second;
-}
+// when the resource stops). HandleMap is the reusable id->handle registry
+// from the library layer (plan §23: functions may use library).
+mta::resources::Store<mta::library::base::HandleMap<std::uint64_t, mta::timer::Timer>> g_timers;
 } // namespace
 
 MTA_LUA_FUNCTION("sample_after",
@@ -49,7 +42,10 @@ MTA_LUA_FUNCTION("sample_after",
     }
 
     const std::uint64_t id = timer.id();
-    g_timers.for_state(L).emplace(id, std::move(timer));
+    if (!g_timers.for_state(L).emplace(id, std::move(timer)))
+    {
+        mta::log::error("sample timer: duplicate timer id ", id);
+    }
     return mta::lua::push_results(L, static_cast<lua_Number>(id));
 }
 
@@ -72,7 +68,10 @@ MTA_LUA_FUNCTION("sample_every",
     }
 
     const std::uint64_t id = timer.id();
-    g_timers.for_state(L).emplace(id, std::move(timer));
+    if (!g_timers.for_state(L).emplace(id, std::move(timer)))
+    {
+        mta::log::error("sample timer: duplicate timer id ", id);
+    }
     return mta::lua::push_results(L, static_cast<lua_Number>(id));
 }
 
@@ -82,7 +81,7 @@ MTA_LUA_FUNCTION("sample_after_cancel",
 {
     auto [id] = mta::lua::args<std::int64_t>(L);
 
-    auto *timer = find_timer(L, static_cast<std::uint64_t>(id));
+    auto *timer = g_timers.for_state(L).find(static_cast<std::uint64_t>(id));
     if (timer == nullptr)
     {
         return mta::lua::push_results(L, false);
@@ -101,6 +100,6 @@ MTA_LUA_FUNCTION("sample_timer_valid",
 {
     auto [id] = mta::lua::args<std::int64_t>(L);
 
-    auto *timer = find_timer(L, static_cast<std::uint64_t>(id));
+    auto *timer = g_timers.for_state(L).find(static_cast<std::uint64_t>(id));
     return mta::lua::push_results(L, timer != nullptr && timer->valid());
 }

@@ -610,3 +610,55 @@ newest last.
   releases.
 - **NEXT**: definition-of-done sweep (§50) — all 14 phases complete; final
   full verification pass.
+
+## DoD sweep — definition of done verification (plan §50)
+
+- **PHASE**: 50 sweep after PHASE 1..14 — every §50 condition checked
+  against the repository, gaps closed.
+- **CHANGED**:
+  - `source/functions/async/task_demo.cpp` and `timer_demo.cpp` migrated
+    from hand-rolled `unordered_map` id→handle flows to the shared
+    `mta::library::base::HandleMap` (removes the duplicated
+    emplace/find/erase pattern; duplicate ids now log an error).
+  - `architecture.md`: the layer diagram now shows `library/` between
+    `functions/` and `sdk/` (direction enforced: `functions → library →
+    sdk`; `sdk → functions` forbidden), with a new §3.0 describing the
+    layer (plan §23).
+- **ADDED**:
+  - `source/library/` — the missing DoD layout slot, with real content:
+    `library/base/handle_map.hpp` (`HandleMap<Id, Handle>` — numeric-id →
+    handle registry with emplace/find/erase/contains; header-only,
+    module-agnostic, no Lua types, exactly the §23 "reusable code used by
+    several functions" case). Not an empty placeholder: two bundled
+    samples genuinely consume it.
+- **REMOVED**: nothing.
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (165 assertions);
+  real-server integration re-run after the refactor — both generations
+  INTEGRATION_RESULT: PASS (log other/server/logs/20260902-052043/).
+- **DoD checklist**:
+  - Architecture: `source/{functions,library,sdk}`, `other/{tests,server,
+    tools,documents,third_party}` all exist and are separated ✓.
+  - Developer workflow: `mta init` / `mta new function` / `mta build` /
+    `mta test` verified end-to-end in PHASE 10 ✓ (no CMake edits needed).
+  - Function creation: one .cpp, auto-discovered, registration macros
+    only ✓ (recursive glob; regression-pinned verbatim names).
+  - Arguments: binder detects count/type/optional/variadic/callback +
+    `context`; plan-§7 error format with the function name ✓.
+  - Lifecycle: after a resource restart old callbacks/tasks/timers are
+    invalid and old state is cleaned; generation identity makes delivery
+    into the new generation impossible — proven by `072_restart.lua`,
+    harness regressions and the real-server §33 scenario ✓.
+  - Async: workers never call Lua; results cross as `Arguments` snapshots
+    and deliver on the main thread ✓.
+  - Userdata: stable `MTA_OBJECT` identity; `typeid` only as a
+    warned fallback ✓.
+  - Documentation: `example.md` walks through function, async function,
+    timer, callback, object, state, error handling ✓.
+  - Doctor: `mta doctor` checks the real environment ✓.
+  - Server: `mta test integration` raises a controlled pinned server and
+    verifies real module load + function execution ✓.
+  - Release: only `<module>.dll`/`.so` after build/test gating ✓.
+- **RISKS**: none new (the HandleMap migration is behavior-preserving and
+  covered by the existing sample tests on both the harness and the real
+  server).
+- **NEXT**: none — all 14 phases and the definition of done are complete.
