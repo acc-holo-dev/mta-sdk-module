@@ -63,7 +63,8 @@ LOGS_DIR = SERVER_DIR / "logs"
 
 # Pinned server build (never "latest"; the exact identity below is
 # what the harness installs and what install.json records). Windows x64
-# server, 1.6 release line, nightly.mtasa.com.
+# server, 1.6 release line, nightly.mtasa.com. The expected_sha256 pins the
+# download: an archive that does not match is rejected before extraction.
 PINNED = {
     "platform": "windows",
     "architecture": "x64",
@@ -72,6 +73,7 @@ PINNED = {
     "build_date": "20260820",
     "filename": "mtasa_x64-1.6-rc-24140-20260820.exe",
     "url": "https://nightly.mtasa.com/mtasa_x64-1.6-rc-24140-20260820.exe",
+    "expected_sha256": "113fb8ea5814a9c23cbb08dd55e3f91548a82f3a09f5ec562dd0f01fd981c5cc",
 }
 
 # NSIS extraction tool. The MTA installer ignores /D when an MTA install is
@@ -249,6 +251,13 @@ def cmd_install(update: bool) -> int:
     if not archive.is_file():
         download(PINNED["url"], archive)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    expected = PINNED.get("expected_sha256")
+    if expected and digest != expected:
+        die(
+            f"the downloaded server archive does not match the pinned checksum:\n"
+            f"  downloaded: {digest}\n  expected:   {expected}\n"
+            f"Delete {archive} and re-run the install if the pinned build was updated."
+        )
 
     install_dir = INSTALL_ROOT / f"mtasa-{PINNED['build']}"
     if install_dir.exists():
