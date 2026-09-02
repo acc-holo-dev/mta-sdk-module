@@ -200,13 +200,23 @@ def module_binary(config: dict) -> Path | None:
 # --- install ------------------------------------------------------------------
 
 
-def download(url: str, target: Path) -> Path:
+def download(url: str, target: Path, attempts: int = 3) -> Path:
     out(f"Downloading {url} ...")
     target.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(url, headers={"User-Agent": "mta-sdk-harness/1.0"})
-    with urllib.request.urlopen(request, timeout=180) as response, target.open("wb") as sink:
-        shutil.copyfileobj(response, sink, length=1 << 20)
-    return target
+    # CI runners are fresh and download this every run; transient resets from
+    # the host (WinError 10054 / URLError) retry instead of failing the job.
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response, target.open("wb") as sink:
+                shutil.copyfileobj(response, sink, length=1 << 20)
+            return target
+        except (urllib.error.URLError, ConnectionResetError, OSError) as err:
+            target.unlink(missing_ok=True)
+            if attempt == attempts:
+                die(f"download failed after {attempts} attempts: {err}")
+            out(f"  download attempt {attempt} failed ({err}); retrying ...")
+    die("download failed")
 
 
 def find_server_exe(base: Path) -> Path | None:
