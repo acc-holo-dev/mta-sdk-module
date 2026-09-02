@@ -231,5 +231,28 @@ embeddable в `build/toolchain/python` — на машине нет систем
 - `mta test unit` — 2/2 passed; `mta test lua` — `harness: passed 216,
   failed 0, script errors 0` (включая новые 015-проверки LuaView-ридеров
   и бенчмарки 092-095; измеренный baseline записан в Problem_12.md);
-- `mta test integration` — см. финальный push (результат фиксируется в
-  CHANGELOG/финальном сообщении коммита волны).
+- `mta test integration` — **20/20 сценариев PASS** (19 сценариев §32 +
+  цикл регрессий §33, 3 генерации ресурсов, graceful shutdown с активными
+  воркерами; pinned-сервер mtasa-24140 установлен в `other/server/`).
+
+## 11. Проверка на GitHub (шаг 15) и найденные там дефекты CI
+
+Оба падения существовали ДО этого агента (первые падения — коммит 4c451e3;
+последний зелёный CI — 05434e2, на старом образе runner'а). Диагностика
+через логи CI (нужен токен владельца: анонимно логи недоступны):
+
+1. **Job «Real-server integration»: exit 127, 0 секунд.** `python` под
+   `shell: msys2 {0}` не существует в MSYS2-окружении. Исправлено: шаги
+   переведены на `shell: pwsh` + шаг, добавляющий `C:\msys64\ucrt64\bin`
+   в PATH (та же схема, что в release.yml).
+2. **Job «Windows (MSVC)»: sdk_tests падал с fail-fast 0xc0000409
+   (STATUS_STACK_BUFFER_OVERRUN = abort/terminate) в 0.8 c, до этого —
+   молча (буферизованный вывод терялся).** Локализация: харнесс переведён
+   на небуферизованный stdout + печать каждой проверки; телеметрия в CI
+   показала краш на `pcall(sample_add, "x", 1)` — путь ошибки. Причина:
+   `protected_call`/`protected_call_named` были `noexcept`, но завершаются
+   `luaL_error`, который делает longjmp; longjmp из noexcept-функции —
+   fail-fast на MSVC (GCC такое прощает). Исправлено: `noexcept` снят с
+   обеих границ (protect.hpp, комментарий объясняет почему).
+3. Финал: **все 6 джоб CI зелёные** (MSVC/MinGW/Linux GCC/Clang, doctor,
+   real-server integration) на коммите b602564.

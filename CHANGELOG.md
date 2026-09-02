@@ -272,6 +272,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- CI: the real-server integration job invoked the Python CLI under
+  `shell: msys2 {0}`, where no Python exists (exit 127, "python: command
+  not found" — the job had been failing since the MSYS2 job rework). The
+  steps now run under pwsh with `C:\msys64\ucrt64\bin` on PATH, matching
+  the release workflow.
+- CI / MSVC: `sdk_tests` died with fail-fast `0xc0000409` on the
+  windows-latest runner (MSVC 14.51): the `protected_call` /
+  `protected_call_named` trampolines were `noexcept` while their catch
+  blocks end in `luaL_error`, which longjmps to the Lua pcall protection
+  point — a longjmp out of a `noexcept` function is a fail-fast on MSVC
+  (GCC tolerates it, which is why win-mingw/linux stayed green). The
+  `noexcept` is removed from the boundary (with an explanatory comment)
+  and the harness now prints unbuffered progress so a crash point is
+  always visible in CI logs.
 - Module-facing Lua headers (vendor/mta-sdk/lua) now match the vendored MTA
   Lua 5.1 exactly: the stock declarations of `luaL_newstate`/`luaL_newstate`
   hid the server's extra `mtasaowner` argument, so a module-created Lua state
