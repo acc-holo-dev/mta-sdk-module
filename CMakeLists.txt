@@ -54,7 +54,7 @@ option(SDK_BUILD_TESTS "Build the embedded Lua test harness (sdk_tests)" ON)
 option(SDK_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
 
 # ---------------------------------------------------------------------------
-# Module identity ” authored in config/module.toml [module]; renaming the
+# Module identity — authored in config/module.toml [module]; renaming the
 # module never touches C++ or CMake. The cache variables below are optional
 # per-configure overrides:
 #
@@ -88,7 +88,7 @@ include(config/cmake/core/file.cmake)
 # ---------------------------------------------------------------------------
 # [features]: subsystem switches. They flow into the build as
 # SDK_FEATURE_* compile definitions, and the bundled sample functions of a
-# disabled subsystem are excluded from the module (and the test binary) ”
+# disabled subsystem are excluded from the module (and the test binary) —
 # the developer decides what the built module ships, only in module.toml.
 # Explicit cache overrides win: -DSDK_FEATURE_ASYNC=OFF, ...
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ endif()
 
 sdk_target_apply_baseline_options(sdk_core)
 
-# Sanitizers (ASan/UBSan) ” for debugging only, not for the production module.
+# Sanitizers (ASan/UBSan) — for debugging only, not for the production module.
 if(SDK_SANITIZE)
   if(MSVC)
     message(WARNING "SDK_SANITIZE is supported only on GCC/Clang")
@@ -249,7 +249,7 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Embedded test harness: runs every module function in clean Lua 5.1 with a
-# mock manager ” no MTA server needed.
+# mock manager — no MTA server needed.
 # ---------------------------------------------------------------------------
 if(SDK_BUILD_TESTS)
   enable_testing()
