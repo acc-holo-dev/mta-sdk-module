@@ -586,8 +586,7 @@ constexpr std::array<std::size_t, sizeof...(I) + 1> required_counts_impl(std::in
     std::array<std::size_t, sizeof...(I) + 1> counts{};
     std::size_t running = 0;
     ((counts[I] = running,
-      running +=
-          (is_required_param_v<std::remove_cvref_t<std::tuple_element_t<I, args_type>>> ? 1u : 0u)),
+      running += is_required_param_v<std::remove_cvref_t<std::tuple_element_t<I, args_type>>>),
      ...);
     counts[sizeof...(I)] = running;
     return counts;
