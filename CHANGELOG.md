@@ -8,6 +8,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `mta` project CLI (plan §24-§29, PHASE 10) in `other/tools/mta/`
+  (stdlib Python + launchers): `init` (full project scaffold, non-destructive
+  guards, identity rewritten from the name), `new function`/`new object`
+  (compile-ready skeletons, registered names verbatim — `crypto.sha256`
+  stays `crypto.sha256`), `build` (CMake presets, platform default), `test
+  [all|unit|lua|integration]` (separated suites), `docs` (markdown from the
+  PHASE 4 registry metadata via a new `sdk_docgen` target), `doctor` (real
+  environment checks: TOML validity, toolchain/cmake/ninja/compiler
+  versions, C++ standard, presets, source discovery, build output, git
+  state, server env, Lua headers byte-compared against the bundled Lua),
+  `package` (dist/ + sha256), `server` (delegates to other/server, lands
+  in PHASE 11).
 - Native types, safe subset (plan §17/PHASE 9): `mta::Resource` — live,
   ABI-backed resource lookup (`find(name)`, `current(L)`, `vm()` re-looked
   up on every call so a stopped resource can never hand out a dangling

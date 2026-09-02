@@ -271,5 +271,18 @@ if(SDK_BUILD_TESTS)
   set_tests_properties(module_config_rejects_garbage PROPERTIES WILL_FAIL TRUE)
 endif()
 
+# ---------------------------------------------------------------------------
+# Registry documentation generator: dumps every registered function with its
+# signature metadata (plan §9) as markdown; `mta docs` builds and runs it.
+# ---------------------------------------------------------------------------
+add_executable(sdk_docgen other/tools/docgen.cpp)
+target_link_libraries(sdk_docgen PRIVATE sdk_core mta_lua)
+target_include_directories(sdk_docgen PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/source
+    ${CMAKE_CURRENT_SOURCE_DIR}/other/third_party/mta-sdk
+)
+sdk_target_apply_baseline_options(sdk_docgen)
+sdk_enable_lto(sdk_docgen)
+
 # Install rules + packaging for releases (see cmake/install.cmake).
 include(cmake/install.cmake)

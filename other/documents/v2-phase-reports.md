@@ -380,3 +380,51 @@ newest last.
   API can extend this layer without breaking the shipped surface.
 - **NEXT**: PHASE 10 — CLI (`mta init/build/test/docs/doctor/package/
   server/new`) in other/tools/mta.
+
+## PHASE 10 — CLI (`mta`)
+
+- **PHASE**: 10 — the `mta` project CLI (plan §24-§29): init, new
+  function/object, build, test, docs, doctor, package, server.
+- **CHANGED**:
+  - `CMakeLists.txt`: new `sdk_docgen` executable target (links sdk_core,
+    dumps `Registry::instance().functions()` with PHASE 4 signature
+    metadata as markdown) — consumed by `mta docs`.
+- **ADDED**:
+  - `other/tools/mta/cli.py` + launchers (`mta.cmd`, POSIX `mta`): the full
+    command set on stdlib Python only.
+  - `other/tools/docgen.cpp` — registry documentation generator; needs no
+    Lua VM (specs are populated by the registration macros' static
+    initializers; body-style functions render `name(...)` with the explicit
+    "signature not derived" note, plan §9).
+  - `mta init <name>`: copies the SDK checkout as the project template,
+    excludes build/.git/dist/toolchain outputs, rewrites module.toml
+    identity, refuses inside an existing project / into a non-empty target,
+    guards against copying the checkout into its own subtree.
+  - `mta new function <name>` / `mta new object <name>`: compile-ready
+    skeletons; registered names verbatim (`crypto.sha256` stays
+    `crypto.sha256`), C++ identifiers sanitized (`crypto_sha256.cpp`,
+    `Weapon`), overwrite refused; verified by compiling generated files.
+  - `mta doctor`: real checks with OK/WARN/FAIL per section — TOML validity
+    and identity, SDK headers, Lua ABI (byte-compare of every
+    mta-sdk/lua/*.h against lua/src/*.h), cmake/ninja/g++ versions from the
+    local toolchain or PATH, C++ standard from TOML, presets, source
+    discovery, build output, git state, server env; prints READY/NOT READY.
+  - `mta test all|unit|lua|integration` via ctest name filters;
+    `mta package` (dist/<name>-<version>-<platform> + sha256);
+    `mta server` reports that the harness lands in PHASE 11.
+- **REMOVED**: nothing.
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (165 assertions).
+  CLI verified end-to-end: doctor READY (4 headers byte-identical, toolchain
+  probes), docs markdown (30 functions), new function `crypto.sha256` and
+  new object `weapon` compiled with zero warnings, test lua/unit suites
+  green, package wrote dist/base-2.0.0-win-x64.dll (sha256 printed), init
+  scaffolded a module project in a temp dir (identity rewritten), guards
+  and server stubs behave. Generated skeletons removed after verification.
+- **RISKS**: the CLI assumes the local toolchain lives under
+  build/toolchain/<name>/<flavour>/bin (git-ignored) or a normal PATH;
+  `mta init` copies the whole checkout (large but explicit); Windows
+  subprocess resolution needed a PATH-aware which() because CreateProcess
+  ignores the child env's PATH (handled in run_tool).
+- **NEXT**: PHASE 11 — real server harness in other/server/ (pinned MTA
+  server download, temp server dir, module install, start/stop, logs),
+  wired into `mta server` and `mta test integration`.
