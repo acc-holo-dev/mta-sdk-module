@@ -64,8 +64,8 @@ inline const char *&current_function_name() noexcept
 }
 
 // RAII: applies a diagnostic context for the current scope and restores the
-// previous one afterwards (also across exceptions). noexcept on purpose: the
-// trampolines that create it are noexcept functions, so an allocation
+// previous one afterwards (also across exceptions). Its members are noexcept
+// because they only move/clear std::strings and never longjmp: an allocation
 // failure drops the affected string part instead of terminating.
 class ScopedDiagnosticContext
 {
@@ -132,7 +132,12 @@ template <typename... Args>
 }
 
 // Trampoline boundary: run fn(L), catch everything and convert to luaL_error.
-inline int protected_call(lua_State *L, int (*fn)(lua_State *)) noexcept
+//
+// Deliberately NOT noexcept: the catch blocks end in luaL_error, which
+// longjmps to the Lua pcall protection point. A longjmp that leaves a
+// noexcept function is a fail-fast crash on MSVC (exit 0xc0000409), and it
+// is at best unspecified elsewhere -- the boundary must stay unwindable.
+inline int protected_call(lua_State *L, int (*fn)(lua_State *))
 {
     try
     {
@@ -161,7 +166,7 @@ inline int protected_call(lua_State *L, int (*fn)(lua_State *)) noexcept
 // the resource owning L for the automatic log-message context (plan §20)
 // and clears any async attribution of the surrounding dispatch. The
 // previous context is restored when the call returns.
-inline int protected_call_named(lua_State *L, int (*fn)(lua_State *), const char *name) noexcept
+inline int protected_call_named(lua_State *L, int (*fn)(lua_State *), const char *name)
 {
     detail::ScopedDiagnosticContext scope{name, 0, 0};
     scope.set_resource(mta::module::current_resource_name(L));
