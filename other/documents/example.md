@@ -2,7 +2,7 @@
 
 This walkthrough builds a small but realistic feature — a **player greeting
 service** with a synchronous API, background work, timers, an object type
-and per-resource state — using only the public V2 surface. The walkthrough
+and per-resource state — using only the public SDK surface. The walkthrough
 uses short teaching names (`greet`, `greeter`); every C++ construct shown
 here exists in the bundled sample module (`source/functions/`) under its
 `sample_*` name, and each section names the real file(s) to open — so you

@@ -1,4 +1,4 @@
-# API Reference — MTA Module SDK V2
+# API Reference — MTA Module SDK
 
 The public surface of the SDK. A module developer includes exactly one
 header and registers functions; everything else in this document is

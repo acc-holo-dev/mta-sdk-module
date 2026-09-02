@@ -1,4 +1,4 @@
-# Architecture — MTA Module SDK V2
+# Architecture — MTA Module SDK
 
 How the SDK is put together: the layers, the key flows, the rules that keep
 a module safe inside the MTA server process, and how everything is tested —
@@ -22,7 +22,7 @@ functions into every resource's VM. The contract is fixed by the server:
 * everything the module does happens inside the server process — a crash or
   an escaped exception takes the server down.
 
-V2 of this SDK turns that raw contract into a **developer-first C++20
+This SDK turns that raw contract into a **developer-first C++20
 framework**: one include (`<mta/sdk.hpp>`), typed function registration,
 background work with handles, per-resource state, stable userdata objects
 and a configuration file that drives identity, build and features. The

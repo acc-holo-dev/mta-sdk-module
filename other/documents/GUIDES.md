@@ -1,6 +1,6 @@
-# Advanced Guides — SDK module
+# Advanced Guides — MTA Module SDK
 
-> The concise V2 reference set lives in [api.md](api.md) (with
+> The concise reference set lives in [api.md](api.md) (with
 > [example.md](example.md), [architecture.md](architecture.md) and
 > [migration-v1-to-v2.md](migration-v1-to-v2.md)).
 
