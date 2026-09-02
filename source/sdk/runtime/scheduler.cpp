@@ -79,6 +79,9 @@ struct Timer
     // VM generation of the owning resource at creation time (plan §14): a
     // timer never fires across a restart of its resource.
     std::uint64_t generation = 0;
+    // Shared with the public handle when one exists (post_timer_handle):
+    // every scheduler-side drop marks the state finished.
+    std::shared_ptr<mta::timer::TimerState> state;
     clock_type::time_point next_fire{};
     int interval_ms = 1;
     std::int64_t repeats_left = 0; // 0 = forever
@@ -308,6 +311,10 @@ void Scheduler::pump()
             {
                 mta::log::debug("timer: dropping a stale timer of resource '", it->resource,
                                 "' from generation ", it->generation);
+                if (it->state != nullptr)
+                {
+                    it->state->finished = true;
+                }
                 it = timers.erase(it);
                 continue;
             }
@@ -334,7 +341,11 @@ void Scheduler::pump()
 
         if (timer.repeats_left > 0 && --timer.repeats_left == 0)
         {
-            continue; // repeat limit reached -- drop the timer
+            if (timer.state != nullptr)
+            {
+                timer.state->finished = true; // repeat limit reached -- drop
+            }
+            continue;
         }
 
         timer.next_fire = now + std::chrono::milliseconds(timer.interval_ms);
@@ -384,17 +395,35 @@ Task run(lua_State *lua_vm, std::function<mta::lua::Arguments()> work,
 std::uint64_t Scheduler::post_timer(std::string resource, int delay_ms, int repeat_count,
                                     std::function<void(std::uint64_t)> completion)
 {
+    return post_timer_impl(resource, delay_ms, repeat_count, std::move(completion))->id;
+}
+
+timer::Timer Scheduler::post_timer_handle(std::string resource, int delay_ms, int repeat_count,
+                                          std::function<void(std::uint64_t)> completion)
+{
+    return timer::Timer{post_timer_impl(resource, delay_ms, repeat_count, std::move(completion))};
+}
+
+std::shared_ptr<timer::TimerState> Scheduler::post_timer_impl(
+    std::string &resource, int delay_ms, int repeat_count,
+    std::function<void(std::uint64_t)> completion)
+{
     Timer timer;
     timer.id = impl_->next_timer_id++;
+    timer.state = std::make_shared<mta::timer::TimerState>();
+    timer.state->id = timer.id;
+    timer.state->resource = resource;
     timer.generation = mta::resources::Hub::instance().generation(resource);
+    timer.state->generation = timer.generation;
     timer.resource = std::move(resource);
     timer.interval_ms = std::max(delay_ms, minimum_timer_delay_ms);
     timer.repeats_left = repeat_count < 0 ? 0 : repeat_count;
     timer.next_fire = clock_type::now() + std::chrono::milliseconds(timer.interval_ms);
     timer.completion = std::move(completion);
 
+    auto state = timer.state; // copy before the timer is moved into the list
     impl_->timers.push_back(std::move(timer));
-    return impl_->next_timer_id - 1;
+    return state;
 }
 
 bool Scheduler::cancel_timer(std::uint64_t timer_id)
@@ -405,18 +434,33 @@ bool Scheduler::cancel_timer(std::uint64_t timer_id)
     {
         return false;
     }
+    if (it->state != nullptr)
+    {
+        it->state->finished = true;
+    }
     impl_->timers.erase(it);
     return true;
 }
 
 void Scheduler::handle_resource_stopped(const std::string &resource)
 {
-    // Timers of the stopped resource are cancelled outright.
-    const auto timer_end = std::remove_if(impl_->timers.begin(), impl_->timers.end(),
-                                          [&resource](const Timer &timer) {
-                                              return timer.resource == resource;
-                                          });
-    impl_->timers.erase(timer_end, impl_->timers.end());
+    // Timers of the stopped resource are cancelled outright; handles of
+    // public timers report invalid afterwards (plan §15).
+    for (auto it = impl_->timers.begin(); it != impl_->timers.end();)
+    {
+        if (it->resource == resource)
+        {
+            if (it->state != nullptr)
+            {
+                it->state->finished = true;
+            }
+            it = impl_->timers.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 
     // Still-queued tasks of the stopped generation are cancelled: their
     // completions must never run (plan §14). Running ones are dropped at

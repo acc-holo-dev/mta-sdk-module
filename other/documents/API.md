@@ -246,6 +246,28 @@ tasks are cancelled and completions of the finished generation are dropped
 before any Lua access. Queue limits come from `[async] queue`; worker count
 from `[async] workers` (`"auto"` = hardware probe, clamped to 1..8).
 
+## mta::timer
+
+Developer-facing timers (plan §15): one-shot and repeating, with a handle
+and automatic resource ownership.
+
+```cpp
+[[nodiscard]] Timer after(lua_State* L, int delay_ms, std::function<void()> fn);
+// fires once on the main thread after delay_ms
+[[nodiscard]] Timer every(lua_State* L, int delay_ms, std::function<void()> fn);
+// repeats every delay_ms until cancelled or the resource stops
+
+class Timer {
+    bool cancel();  // true if a scheduled timer was cancelled
+    bool valid();   // still scheduled (will fire again)
+    std::uint64_t id();
+};
+```
+
+Timers are resource-aware: they belong to the calling resource and its VM
+generation. When the resource stops, every owned timer is invalidated, and
+a restart of the same resource never revives one of an older generation.
+
 ## mta::resources::Store<T>
 
 Per-resource data with automatic cleanup when the resource stops.

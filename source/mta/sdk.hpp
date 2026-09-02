@@ -41,6 +41,7 @@
 // --- runtime services ---------------------------------------------------------
 #include "sdk/runtime/callback.hpp"
 #include "sdk/runtime/scheduler.hpp"
+#include "sdk/runtime/timer.hpp"
 #include "sdk/resources/resources.hpp"
 #include "sdk/logging/logging.hpp"
 #include "sdk/events/events.hpp"

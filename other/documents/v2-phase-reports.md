@@ -274,3 +274,40 @@ newest last.
   already being paid for); worker count is fixed at start (module load).
 - **NEXT**: PHASE 7 — Timer V2: `mta::timer::after()/every()` with
   `.cancel()/.valid()` handles (plan §15).
+
+## PHASE 7 — Timer V2 (public timer API with handles)
+
+- **PHASE**: 7 — developer-facing timer API over the internal scheduler
+  timers (plan §15): after/every, cancel/valid handles, resource-aware
+  invalidation, no stale execution after restart.
+- **CHANGED**:
+  - `sdk/runtime/scheduler.{hpp,cpp}`: every scheduled timer now owns a
+    shared `mta::timer::TimerState`; new `post_timer_handle` returns the
+    public handle (raw-id `post_timer` delegates to `post_timer_impl`);
+    all scheduler-side drops mark the state finished — explicit cancel,
+    resource stop (`handle_resource_stopped`), stale-generation drop and
+    repeat-limit expiry in `pump()`, so handles report invalid without
+    guessing.
+  - `source/mta/sdk.hpp`: facade exports `mta::timer`.
+  - API.md: `mta::timer` section added.
+- **ADDED**:
+  - `sdk/runtime/timer.{hpp,cpp}` — `TimerState`/`Timer` handle and
+    `mta::timer::after(L, delay, fn)` / `every(L, delay, fn)`; resource
+    attribution via the calling resource; negative delays raise errors.
+  - `source/functions/async/timer_demo.cpp` — `sample_after`,
+    `sample_every`, `sample_after_cancel`, `sample_timer_valid` (per-
+    resource registry via `resources::Store`).
+  - `other/tests/lua/scripts/038_timer.lua` — one-shot fires exactly once
+    then invalid; cancel-before-fire (double cancel false, no delivery);
+    every() repeats until cancelled and stops exactly at cancel; resource
+    stop invalidates owned timers and nothing fires afterwards.
+- **REMOVED**: nothing; the internal raw-id `post_timer`/`cancel_timer`
+  API stays for existing callers.
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (160 assertions).
+- **RISKS**: timer handles are main-thread-only state (documented) —
+  cancelling from a worker is impossible by design; the repeat-limit expiry
+  marks the handle finished only after the final callback returns (a
+  callback cancelling itself sees valid() true — harmless and documented
+  behaviour).
+- **NEXT**: PHASE 8 — Userdata V2: stable explicit userdata type ids
+  (plan §16), `[features]` consumption.

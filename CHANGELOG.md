@@ -8,6 +8,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Timer V2 (plan §15): `mta::timer::after(L, delay, fn)` (one-shot) and
+  `mta::timer::every(L, delay, fn)` (repeating) return a `Timer` handle
+  (`cancel()/valid()/id()`); timers are resource-aware — a resource stop
+  invalidates every owned timer and stale-generation timers can never fire
+  into a restarted VM.
+- Samples `sample_after`/`sample_every`/`sample_after_cancel`/
+  `sample_timer_valid` (per-resource timer registry) and Lua test
+  `038_timer.lua`.
 - Async V2 task API (plan §13/§14): `mta::async::run(L, work, completion)`
   returns a cancellable `Task` handle (`cancel()/done()/valid()/id()`);
   cooperative cancellation suppresses the completion; the task is owned by
@@ -33,6 +41,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Timer scheduling internals: `Scheduler::post_timer_impl` creates shared
+  `mta::timer::TimerState` for every timer; all scheduler-side drops
+  (cancel, resource stop, stale generation, repeat limit) mark the state
+  finished so public handles report `valid() == false`.
 - `Scheduler::post_task` returns a `Task` handle and takes optional
   (resource, generation) ownership; `sample_async_add` migrated to
   `mta::async::run` and reports queue-full rejections.

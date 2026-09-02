@@ -26,6 +26,7 @@
 
 #include "sdk/lua/arguments.hpp"
 #include "sdk/runtime/task.hpp"
+#include "sdk/runtime/timer.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -66,6 +67,12 @@ public:
     // (0 = until cancelled or the resource stops). Returns an id > 0.
     [[nodiscard]] std::uint64_t post_timer(std::string resource, int delay_ms, int repeat_count,
                                             std::function<void(std::uint64_t)> completion);
+    // Same, but returns a shared-state handle whose cancel()/valid() reflect
+    // scheduler-side drops too (fired final, resource stopped, stale
+    // generation) -- the mta::timer::after/every implementation.
+    [[nodiscard]] timer::Timer post_timer_handle(std::string resource, int delay_ms,
+                                                 int repeat_count,
+                                                 std::function<void(std::uint64_t)> completion);
     bool cancel_timer(std::uint64_t timer_id);
 
     // Cancels the timers of a resource that just stopped.
@@ -83,6 +90,9 @@ private:
     Scheduler &operator=(const Scheduler &) = delete;
 
     void worker_loop();
+    [[nodiscard]] std::shared_ptr<timer::TimerState> post_timer_impl(
+        std::string &resource, int delay_ms, int repeat_count,
+        std::function<void(std::uint64_t)> completion);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
