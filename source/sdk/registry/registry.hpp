@@ -60,7 +60,7 @@ class Registry
 public:
     static Registry &instance();
 
-    void add(Spec spec);
+    void add(const Spec &spec);
 
     // Registers every function into the resource's VM (at each resource start).
     void register_all(ILuaModuleManager10 &manager, lua_State *lua_vm) const;

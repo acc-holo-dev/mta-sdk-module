@@ -129,6 +129,37 @@ jobs:
       - name: Run doctor
         run: python other/tools/mta/cli.py doctor
 
+  cppcheck:
+    # Static analysis gate (warning/portability findings fail CI).
+    # Suppressions are codebase-specific, documented in the gate:
+    # - nullPointer: cppcheck mis-models the assert(lua_vm) guards
+    #   (bogus "(int*)NULL" reports on the assert lines).
+    # - uninitMemberVar / uninitMemberVarNoCtor: conservative on the
+    #   registration-only structs (Spec, ObjectTypeInfo) — constructed
+    #   only in registration paths that set every member.
+    # Registration macros are expanded to nothing (cppcheck cannot parse
+    # them) and the module identity defines satisfy the #error guards.
+    # Performance findings are informational: gate on them locally with
+    # --enable=performance, not in CI.
+    name: cppcheck (static analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: Static analysis gate
+        run: >
+          cppcheck --std=c++20 --enable=warning,portability
+          --suppress=nullPointer
+          --suppress=uninitMemberVar
+          --suppress=uninitMemberVarNoCtor
+          -DMTA_OBJECT= -DMTA_METHOD= -DMTA_STATE= -DMTA_LUA_FUNCTION= -DMTA_LUA_FUNC= -DMTA_FUNCTION= -DSDK_MODULE_VERSION=1 -DSDK_MODULE_TITLE=base -DSDK_AUTHOR=Developer
+          --error-exitcode=1
+          -I source -I other/third_party/lua/src -I other/third_party/mta-sdk
+          --quiet source
+
   integration:
     # Run the real-server integration where the environment
     # allows. The harness drives a pinned Windows MTA server build

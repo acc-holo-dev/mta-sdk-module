@@ -11,7 +11,7 @@ Registry &Registry::instance()
     return registry;
 }
 
-void Registry::add(Spec spec)
+void Registry::add(const Spec &spec)
 {
     functions_.push_back(spec);
 }
