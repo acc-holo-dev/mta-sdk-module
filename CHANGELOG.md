@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Native types, safe subset (plan §17/PHASE 9): `mta::Resource` — live,
+  ABI-backed resource lookup (`find(name)`, `current(L)`, `vm()` re-looked
+  up on every call so a stopped resource can never hand out a dangling
+  lua_State, `alive()`); samples `sample_resource_name`/`sample_resource_find`
+  and tests. Player/Vehicle/Element wrappers are intentionally absent: the
+  frozen module ABI exposes no element API, so they cannot be represented
+  safely (documented in the header).
 - Userdata V2 (plan §16): `MTA_OBJECT("counter", Counter)` declares a
   stable, deterministic, compiler-independent type identity; the metatable
   name is module-aware (`mta.<module>.<type>`) so two modules cannot

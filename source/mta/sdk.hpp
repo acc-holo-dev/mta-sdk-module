@@ -22,6 +22,8 @@
 //   mta::lua::{Argument, Table, Arguments}            -- snapshots (async-safe)
 //   mta::lua::{check_*, opt_*}                        -- manual stack access
 //   mta::async::Callback / mta::async::Scheduler      -- background work
+//   mta::timer::{after, every}                        -- timer handles
+//   mta::Resource                                     -- native types (safe subset)
 //   mta::resources::{Hub, Store}                      -- per-resource state
 //   mta::log::{info, warn, error, debug}              -- logging
 //   mta::events::trigger                              -- module -> Lua events
@@ -39,6 +41,7 @@
 #include "sdk/lua/protect.hpp"
 
 // --- runtime services ---------------------------------------------------------
+#include "sdk/native/resource.hpp"
 #include "sdk/runtime/callback.hpp"
 #include "sdk/runtime/scheduler.hpp"
 #include "sdk/runtime/timer.hpp"

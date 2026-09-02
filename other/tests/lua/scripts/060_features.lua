@@ -37,3 +37,8 @@ test_assert(name2 == "unknown" and hp2 == 0, "table get defaults")
 -- table helpers: writing a field
 local t = sample_table_set({hp = 50}, "Alice")
 test_assert(t.name == "Alice" and t.hp == 50, "table set field")
+
+-- native types (plan §17): the safe Resource wrapper
+test_assert(sample_resource_name() == "test_resource", "sample_resource_name returns the calling resource")
+test_assert(sample_resource_find("test_resource") == true, "a running resource is found")
+test_assert(sample_resource_find("no_such_resource_xyz") == false, "an unknown resource is not found")

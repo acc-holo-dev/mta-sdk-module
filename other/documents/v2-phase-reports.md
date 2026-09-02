@@ -352,3 +352,31 @@ newest last.
   one TU per type.
 - **NEXT**: PHASE 9 — Native MTA types (conservative: the ILuaModuleManager10
   ABI exposes no element API; only VM lookup by resource name).
+
+## PHASE 9 — Native MTA types (safe subset)
+
+- **PHASE**: 9 — safe native-type wrappers (plan §17) "where possible": the
+  frozen ILuaModuleManager10 ABI exposes NO element/player/vehicle API, so
+  only the piece that can be represented safely ships: resource lookup.
+- **CHANGED**:
+  - `source/mta/sdk.hpp`: facade exports `mta::Resource` and documents the
+    native-types scope.
+- **ADDED**:
+  - `sdk/native/resource.{hpp,cpp}` — `mta::Resource` with
+    `find(name)`/`current(L)` (nothing when unknown/absent) and `vm()`:
+    a LIVE `GetResourceFromName` lookup on every call, never a cached
+    lua_State (the server can destroy VMs at any time; plan §14). The
+    header documents why `mta::Player`/`mta::Vehicle`/`mta::Element` are
+    NOT provided: they would require calling engine functions by name in a
+    foreign VM with no type guarantee across server versions and nothing
+    verifiable in the harness — the plan's safety condition is not met.
+  - `source/functions/info/resource_info.cpp` — `sample_resource_name`
+    (calling resource) and `sample_resource_find` (live running check).
+  - `060_features.lua`: found/unknown resource assertions.
+- **REMOVED**: nothing.
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (165 assertions).
+- **RISKS**: `vm()` results are valid only for the immediate call on the
+  main thread (by design, documented); a future MTA ABI exposing an element
+  API can extend this layer without breaking the shipped surface.
+- **NEXT**: PHASE 10 — CLI (`mta init/build/test/docs/doctor/package/
+  server/new`) in other/tools/mta.
