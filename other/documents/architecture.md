@@ -304,7 +304,7 @@ generation check tells a live callback from a stale one
 
 ## 6. Configuration
 
-`config/module.toml` is parsed by CMake (`cmake/core/module-config.cmake`)
+`config/module.toml` is parsed by CMake (`config/cmake/core/module-config.cmake`)
 **before** `project()` — even `project(VERSION)` comes from the TOML — and
 by the `mta` CLI. `workers`/`queue` compile into `SDK_ASYNC_*` defines;
 `[features]` compile into `SDK_FEATURE_*` defines and exclude the matching

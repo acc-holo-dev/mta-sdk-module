@@ -600,7 +600,7 @@ if (auto server = mta::server_info())      // runtime: nullopt without a module 
 
 * CMake parses `SDK_VERSION` out of `version.hpp` for `project(VERSION)`
   (`CMakeLists.txt`) — the project version is the SDK's, deliberately not
-  the module's; `cmake/install.cmake` names the package ZIP with the
+  the module's; `config/cmake/install.cmake` names the package ZIP with the
   **Module** version, because the ZIP is a module artifact.
 * The load diagnostic reports them separately:
   `module: loaded base (module 2.1, sdk 1.0.0, abi 1; MTA <server version>)`.
