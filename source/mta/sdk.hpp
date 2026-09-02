@@ -18,7 +18,7 @@
 //
 // Exported here (additions land together with their subsystem):
 //   MTA_FUNCTION / MTA_LUA_FUNCTION / MTA_LUA_FUNC   -- function registration
-//   MTA_STATE / mta::state                           -- borrowed Lua state
+//   MTA_STATE / mta::state (mta::LuaView)            -- borrowed Lua state
 //                                                    --   view (plan §18)
 //   mta::lua::args / push_results / raise_error      -- values & errors
 //   mta::lua::{Argument, Table, Arguments}           -- snapshots (async-safe)

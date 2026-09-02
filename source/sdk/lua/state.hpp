@@ -73,9 +73,47 @@ public:
         return mta::lua::push_results(lua_vm_, std::forward<Values>(values)...);
     }
 
+    // Number of call arguments (values on the stack).
+    [[nodiscard]] int arg_count() const noexcept { return lua_gettop(lua_vm_); }
+
+    // Typed argument readers (plan §18: the LuaView is the synchronous read
+    // surface) -- the same conversions and error messages as the free
+    // mta::lua::check_*/opt_* helpers in sdk/lua/stack.hpp. Indices follow
+    // Lua conventions: 1-based, negatives count from the top.
+    [[nodiscard]] double check_number(int index) const { return mta::lua::check_number(lua_vm_, index); }
+    [[nodiscard]] double opt_number(int index, double default_value) const
+    {
+        return mta::lua::opt_number(lua_vm_, index, default_value);
+    }
+    [[nodiscard]] lua_Integer check_integer(int index) const
+    {
+        return mta::lua::check_integer(lua_vm_, index);
+    }
+    [[nodiscard]] lua_Integer opt_integer(int index, lua_Integer default_value) const
+    {
+        return mta::lua::opt_integer(lua_vm_, index, default_value);
+    }
+    [[nodiscard]] bool check_boolean(int index) const { return mta::lua::check_boolean(lua_vm_, index); }
+    [[nodiscard]] bool opt_boolean(int index, bool default_value) const
+    {
+        return mta::lua::opt_boolean(lua_vm_, index, default_value);
+    }
+    [[nodiscard]] std::string check_string(int index) const { return mta::lua::check_string(lua_vm_, index); }
+    [[nodiscard]] std::string opt_string(int index, const char *default_value) const
+    {
+        return mta::lua::opt_string(lua_vm_, index, default_value);
+    }
+
 private:
     lua_State *lua_vm_ = nullptr;
 };
+} // namespace mta
+
+// Plan §18 spells the borrowed model "LuaView": mta::LuaView is the same type
+// as mta::state (the facade name), kept as an alias so both vocabularies work.
+namespace mta
+{
+using LuaView = state;
 } // namespace mta
 
 // The calling VM as a state view (plan §18): expression form, name the view

@@ -6,7 +6,7 @@
 A solid foundation for [MTA:SA](https://multitheftauto.com) server modules:
 a dynamic library (base.dll / base.so by default) that the MTA server loads
 and that adds native Lua functions of its own. The binary name is
-configurable at CMake time — see [Module identity](#module-identity).
+configurable at CMake time — see [Module identity](#configuration-configmoduletoml).
 
 Functions are written in **plain C++ with a body**; arguments are read by
 type automatically — no manual check_number, no indices, no "this is a
@@ -34,7 +34,7 @@ resource; new .cpp files are picked up automatically.
 ## Table of contents
 
 - [Architecture](#architecture)
-- [Module identity](#module-identity)
+- [Module identity](#configuration-configmoduletoml)
 - [Building](#building)
 - [Server installation](#server-installation)
 - [Writing functions](#writing-functions)
@@ -43,7 +43,7 @@ resource; new .cpp files are picked up automatically.
 - [Testing](#testing)
 
 > For the full design — layers, data flows, threading rules — see
-> [other/documents/ARCHITECTURE.md](other/documents/ARCHITECTURE.md).
+> [other/documents/architecture.md](other/documents/architecture.md).
 
 ## Architecture
 
@@ -80,7 +80,7 @@ source/
 other/
 ├── tests/        # lua/ (embedded harness + scripts), unit/, integration/
 ├── server/       # real-MTA-server test infrastructure
-├── documents/    # API.md, ARCHITECTURE.md, GUIDES.md, TUTORIAL.md
+├── documents/    # api.md, architecture.md, example.md, GUIDES.md, TUTORIAL.md
 ├── tools/        # developer CLI (mta)
 └── third_party/  # mta-sdk (SDK headers) + lua (Lua 5.1.5)
 cmake/            # build infrastructure
@@ -136,7 +136,7 @@ cmake --preset win-mingw -DSDK_MODULE_TITLE="My Module" -DSDK_MODULE_AUTHOR="Jan
 
 The parser lives in `cmake/core/module-config.cmake`; `[async]` and
 `[features]` are consumed by the subsystems that own them (async, objects).
-See [other/documents/ARCHITECTURE.md](other/documents/ARCHITECTURE.md#6-configuration--no-source-edits-needed).
+See [other/documents/architecture.md](other/documents/architecture.md#6-configuration--no-source-edits-needed).
 
 ## Building
 
@@ -273,12 +273,9 @@ MTA_LUA_FUNCTION("my_echo", "Returns every argument back.")
 ### Async function and timers
 
 ```cpp
+#include <mta/sdk.hpp>
+
 #include <memory>
-#include "lua/arguments.hpp"
-#include "registry/registry.hpp"
-#include "runtime/callback.hpp"
-#include "runtime/logging.hpp"
-#include "runtime/scheduler.hpp"
 
 MTA_LUA_FUNCTION("my_async", "Computes in the background; callback(result) runs on DoPulse.")
 {
@@ -412,5 +409,5 @@ and attaches them to a GitHub Release — see .github/workflows/.
 
 The module title/author and binary name are configured via
 SDK_MODULE_TITLE / SDK_MODULE_AUTHOR / SDK_MODULE_NAME (see
-[Module identity](#module-identity)); the version comes from
+[Module identity](#configuration-configmoduletoml)); the version comes from
 `project(VERSION ...)` in CMakeLists.txt.

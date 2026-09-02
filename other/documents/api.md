@@ -26,18 +26,19 @@ the live example of every API in this document.
 3. [Returning results](#returning-results)
 4. [Errors](#errors)
 5. [Value snapshots: Argument / Table / Arguments](#value-snapshots-argument--table--arguments)
-6. [Direct stack access](#direct-stack-access)
-7. [Logging](#logging)
-8. [Background tasks (async)](#background-tasks-async)
-9. [Callbacks](#callbacks)
-10. [Timers](#timers)
-11. [Per-resource state](#per-resource-state)
-12. [Objects (userdata)](#objects-userdata)
-13. [Events](#events)
-14. [Native types (Resource)](#native-types-resource)
-15. [Module identity and lifecycle](#module-identity-and-lifecycle)
-16. [Configuration: config/module.toml](#configuration-configmoduletoml)
-17. [The `mta` CLI](#the-mta-cli)
+6. [The borrowed state view: mta::state / MTA_STATE](#the-borrowed-state-view-mtastate--mta_state)
+7. [Direct stack access](#direct-stack-access)
+8. [Logging](#logging)
+9. [Background tasks (async)](#background-tasks-async)
+10. [Callbacks](#callbacks)
+11. [Timers](#timers)
+12. [Per-resource state](#per-resource-state)
+13. [Objects (userdata)](#objects-userdata)
+14. [Events](#events)
+15. [Native types (Resource)](#native-types-resource)
+16. [Module identity and lifecycle](#module-identity-and-lifecycle)
+17. [Configuration: config/module.toml](#configuration-configmoduletoml)
+18. [The `mta` CLI](#the-mta-cli)
 
 ---
 
@@ -201,6 +202,66 @@ cross the async boundary — a background worker never touches `lua_State`.
 * `mta::lua::Arguments` — a flat list: `read(L, start_index)`, `push(L)`,
   `push_number/push_string/push_boolean/push_nil/push_light_userdata`,
   `append`, `count`, `call(L, "global_fn", &error)` (pcall convenience).
+
+---
+
+## The borrowed state view: mta::state / MTA_STATE
+
+`mta::state` is the **View** half of the value model (plan §18 spells the
+model "LuaView"; `mta::LuaView` is an alias for the same type): a borrowed,
+non-owning wrapper around the **current** VM, valid only for the synchronous
+call that created it. Where the snapshots above own copies of values so they
+can survive the async boundary, `mta::state` is the convenience read/write
+surface while the call is live.
+
+```cpp
+mta::state view = MTA_STATE(L);   // expression form: wrap the calling VM
+```
+
+Methods (each mirrors the free function of the same name — see
+[Reading arguments](#reading-arguments) and
+[Direct stack access](#direct-stack-access)):
+
+* `top()` / `arg_count()` — values currently on the stack (inside a module
+  function this is the call-argument count).
+* `resource_name()` — the resource owning this VM right now, resolved live
+  through the module manager (`""` when it cannot be determined).
+* `args<Ts...>()` — the same typed positional read as `mta::lua::args`,
+  returning a `std::tuple<Ts...>` (the same supported types table).
+* `push_results(...)` — the same result conversions as
+  `mta::lua::push_results`; returns how many values were pushed.
+* `check_number/check_integer/check_string/check_boolean(index)` and
+  `opt_number/opt_integer/opt_string/opt_boolean(index, default)` — the
+  same typed readers and error messages as the free `mta::lua::check_*`/
+  `opt_*` helpers (1-based indices, negatives count from the top).
+* `valid()` / `handle()` — null-safety and the wrapped `lua_State*`.
+
+The rule that makes the View safe: **never store it and never carry it
+anywhere** — not into a later call, not across threads, not into async
+work. A resource's VM dies when the resource stops and a restart runs a
+fresh VM (plan §14). The only values allowed to cross the async boundary
+are the owned snapshots `mta::lua::{Argument, Table, Arguments}` (see
+[Value snapshots](#value-snapshots-argument--table--arguments)).
+
+Sample (`sample_state`, `source/functions/state/view.cpp`):
+
+```cpp
+MTA_LUA_FUNCTION("sample_state",
+    "Returns a table {resource = ..., top = ...} describing the calling VM "
+    "through the mta::state view.")
+{
+    mta::state view = MTA_STATE(L);
+    mta::lua::Table data;
+    data.fields.emplace_back("resource", mta::lua::Argument(view.resource_name()));
+    data.fields.emplace_back("top", mta::lua::Argument(static_cast<lua_Number>(view.top())));
+    return mta::lua::push_results(L, mta::lua::Argument(std::move(data)));
+}
+```
+
+```lua
+sample_state()       -- { resource = "test_resource", top = 0 }
+sample_state(1, 2)   -- { resource = "test_resource", top = 2 }  (top counts the call arguments)
+```
 
 ---
 
@@ -517,6 +578,40 @@ The signature metadata reports the type as `resource` (see
 `mta::module::info()` → `{name, author, version}` — from
 `config/module.toml`, compiled into the binary. `current_resource_name(L)`
 is the ABI-safe resource lookup used by `context`, `Store` and `Callback`.
+
+### The four versions (plan §38)
+
+Four version entities are kept strictly separate. The two SDK-side ones have
+a single source — `source/sdk/version.hpp` — whose values are never
+duplicated as literals anywhere else:
+
+| Version | Source | Surfaces |
+|---|---|---|
+| SDK version | `SDK_VERSION "1.0.0"` in `source/sdk/version.hpp` | `mta::sdk_info().version`; CMake `project(VERSION)`; `mta doctor` |
+| Module version | `config/module.toml` `[module] version` → CMake `SDK_MODULE_VERSION` float (`"2.0.0"` → `2.0`) | binary metadata / `InitModule`, `module_info().version`, packaging |
+| ABI version | `SDK_ABI_VERSION "1"` in `source/sdk/version.hpp` | `mta::sdk_info().abi_version` — the six `MTAEXPORT` entry points + `ILuaModuleManager10` contract |
+| MTA server version | runtime fact from the module manager (`GetVersionString()`) | `mta::server_info()` (with netcode version and OS) |
+
+```cpp
+const mta::SdkInfo sdk = mta::sdk_info();  // compile-time: available before InitModule
+if (auto server = mta::server_info())      // runtime: nullopt without a module manager
+    mta::log::info("MTA server ", server->version);
+```
+
+* CMake parses `SDK_VERSION` out of `version.hpp` for `project(VERSION)`
+  (`CMakeLists.txt`) — the project version is the SDK's, deliberately not
+  the module's; `cmake/install.cmake` names the package ZIP with the
+  **Module** version, because the ZIP is a module artifact.
+* The load diagnostic reports them separately:
+  `module: loaded base (module 2.0, sdk 1.0.0, abi 1; MTA <server version>)`.
+* `mta doctor` parses the same header (`read_sdk_version_header` in
+  `other/tools/mta/cli.py`) and prints `SDK version: sdk 1.0.0` and
+  `ABI version: module-abi 1` as two separate checks, next to the Project
+  line that carries the Module version — the same facts the build compiles
+  in.
+* `sample_version` (`source/functions/info/version.cpp`) returns
+  `module`/`module_version`, `sdk_version`, `abi_version` and (when the
+  module manager is attached) `mta`/`netcode`/`os` as separate fields.
 
 The lifecycle hooks (`initialize`, `register_functions`, `pulse`,
 `shutdown`, `resource_stopping`, `resource_stopped`) are implemented by the

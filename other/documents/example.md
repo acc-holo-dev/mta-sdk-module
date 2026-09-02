@@ -2,9 +2,13 @@
 
 This walkthrough builds a small but realistic feature — a **player greeting
 service** with a synchronous API, background work, timers, an object type
-and per-resource state — using only the public V2 surface. Every construct
-shown here exists in the bundled sample module (`source/functions/`), so you
-can see each one compiled and tested in place.
+and per-resource state — using only the public V2 surface. The walkthrough
+uses short teaching names (`greet`, `greeter`); every C++ construct shown
+here exists in the bundled sample module (`source/functions/`) under its
+`sample_*` name, and each section names the real file(s) to open — so you
+can see each one compiled and tested in place. The closing sections cover
+the developer tooling (`mta`) that builds, documents and diagnoses the
+module.
 
 *Prerequisites: `mta doctor` reports READY (see api.md, "The `mta` CLI").*
 
@@ -46,8 +50,12 @@ nothing is duplicated in C++ sources.
 
 ## 2. A synchronous function
 
-`source/functions/greeter/greet.cpp` — files under `source/` are picked up
-automatically; registration happens at static-init time:
+Bundled analogues of everything below — `source/functions/basics/greet.cpp`
+(`sample_greet` — body style + optional), `hello.cpp` (`sample_hello`,
+`sample_hello_desc` — lambda style) and `typed_params.cpp`
+(`sample_rest_count`/`sample_context_caller` — rest_args + context). Files
+under `source/` are picked up automatically; registration happens at
+static-init time:
 
 ```cpp
 #include <mta/sdk.hpp>
@@ -66,8 +74,12 @@ greet(42)                      -- error: bad argument #1 to 'greet'
                                --        (expected string, got number)
 ```
 
+Body-style bundled analogue: `source/functions/basics/greet.cpp`
+(`sample_greet`).
+
 The same function in lambda style — signatures are introspected, argument
-checks and result pushing are automatic:
+checks and result pushing are automatic (bundled analogues:
+`source/functions/basics/hello.cpp` — `sample_hello`, `sample_hello_desc`):
 
 ```cpp
 MTA_FUNCTION("greet", "Builds a greeting for a name.",
@@ -103,6 +115,11 @@ MTA_LUA_FUNCTION("greet_where", "Greets and reports the calling resource.")
     return mta::lua::push_results(L, "Hello, " + name);
 }
 ```
+
+Bundled analogues per construct: the optional argument — `sample_greet`
+(`source/functions/basics/greet.cpp`); the variadic tail — `sample_rest_count`
+and the call context — `sample_context_caller` (both
+`source/functions/basics/typed_params.cpp`).
 
 ---
 
@@ -467,6 +484,302 @@ MTA_LUA_FUNCTION("clamp", "Clamps value into [lo, hi].")
 
 ---
 
+## 10. Multiple return values
+
+A tuple — or several values in one `push_results` call — becomes several Lua
+results. Bundled analogues: `source/functions/basics/hello.cpp`
+(`sample_hello_len`) and `basics/minmax.cpp` (`sample_minmax`):
+
+```cpp
+// Lambda style: the tuple is expanded -- Lua receives two results.
+MTA_FUNCTION("sample_hello_len", "Greets and reports the name length.",
+    [](std::string name)
+    {
+        return std::make_tuple("Hello, " + name, static_cast<int>(name.size()));
+    });
+
+// Body style: several values in one push_results.
+MTA_LUA_FUNCTION("sample_minmax", "Returns the minimum and maximum of two numbers.")
+{
+    auto [a, b] = mta::lua::args<double, double>(L);
+    return mta::lua::push_results(L, std::min(a, b), std::max(a, b));
+}
+```
+
+```lua
+local text, len = sample_hello_len("Sam")   -- text = "Hello, Sam", len = 3
+local lo, hi    = sample_minmax(30, 10)     -- lo = 10, hi = 30
+sample_hello_len(42)   -- error: bad argument #1 to 'sample_hello_len'
+                       --        (expected string, got number)
+```
+
+A `std::vector<T>` or `mta::lua::Arguments` result is expanded the same way
+(a dynamic result list — `sample_range`, `source/functions/basics/range.cpp`);
+a `std::optional<T>` result collapses to `nil` when absent.
+
+---
+
+## 11. Tables
+
+`mta::lua::Table` is a decoded snapshot of a Lua table — an `array` part plus
+named `fields` — so C++ works on plain data instead of stack indices. Field
+access by key lives in `source/sdk/lua/table_helpers.hpp` (`get_field`,
+`set_field`, `find_field`). Bundled analogues:
+`source/functions/tables/table_fields.cpp` and `tables/table_stats.cpp`:
+
+```cpp
+// table_fields.cpp: read fields with defaults, write a field back.
+MTA_LUA_FUNCTION("sample_table_get",
+    "Reads the 'name' (string) and 'hp' (number) fields of a table; returns both.")
+{
+    auto [table] = mta::lua::args<mta::lua::Table>(L);
+
+    const std::string name = mta::lua::get_field<std::string>(table, "name", "unknown");
+    const double hp = mta::lua::get_field<double>(table, "hp", 0.0);
+
+    return mta::lua::push_results(L, name, hp);
+}
+
+MTA_LUA_FUNCTION("sample_table_set",
+    "Writes the 'name' field into a table and returns the table back.")
+{
+    auto [table, name] = mta::lua::args<mta::lua::Table, std::string>(L);
+
+    mta::lua::set_field(table, "name", mta::lua::Argument(name));
+
+    return mta::lua::push_results(L, mta::lua::Argument(std::move(table)));
+}
+```
+
+```lua
+local name, hp = sample_table_get({name = "Alice", hp = 100})  -- "Alice", 100
+local name, hp = sample_table_get({})                          -- "unknown", 0
+local t = sample_table_set({hp = 90}, "Bob")                   -- {name = "Bob", hp = 90}
+
+sample_table_get("not a table")  -- error: bad argument #1 to 'sample_table_get'
+                                 --        (expected table, got string)
+```
+
+Nested tables are decoded recursively: `table_stats.cpp` walks `array` +
+`fields` down the whole value tree and builds its result table with
+`result.fields.emplace_back(...)`. The helpers raise readable errors when a
+field is missing without a default (`table has no field 'hp'`) or has the
+wrong type (`field must be a number, got string`) —
+`source/sdk/lua/table_helpers.hpp`.
+
+---
+
+## 12. Errors
+
+§9 showed where argument errors come from; this is the model behind them
+(`source/sdk/errors/errors.hpp`, rendered at the protected trampoline in
+`source/sdk/lua/protect.hpp`). From your own code raise with
+`mta::lua::raise_error(...)` — it streams the message, throws the `Generic`
+category, and the trampoline converts it into a proper Lua error (local C++
+objects destroyed first, nothing escapes into the server). Bundled analogue:
+`source/functions/basics/range.cpp`:
+
+```cpp
+// range.cpp -- a deliberate, scripter-facing error:
+if (to >= from && static_cast<std::uint64_t>(to) - static_cast<std::uint64_t>(from) > 1000)
+{
+    mta::lua::raise_error("range too large: at most 1000 numbers");
+}
+```
+
+```lua
+sample_range(1, 5000)   -- error: range too large: at most 1000 numbers
+```
+
+Every error carries a category; the category decides how it is rendered:
+
+| Category | Producer | Rendered to Lua |
+|---|---|---|
+| `Generic` | deliberate `raise_error` in a function body | message verbatim |
+| `InvalidArgument` / `InvalidType` / `MissingArgument` | binder (count / order / type) | `bad argument #N to 'name' (…)` |
+| `ResourceStopped` | operation on a dead resource generation | message verbatim |
+| `InvalidCallback` | stale or invalid Lua callback reference | message verbatim |
+| `InvalidObject` | object of another type or another resource | message verbatim |
+| `AsyncCancelled` | background task was cancelled | message verbatim |
+| `InternalError` | framework bug / unexpected C++ exception | `internal module error: …` |
+
+The one asymmetry is deliberate: only `InternalError` gets the
+`internal module error:` prefix, so a framework bug can never masquerade as
+a scripter mistake — every other category is the producer's user-facing
+message, verbatim.
+
+---
+
+## 13. Native MTA types
+
+The module ABI exposes exactly one safe native lookup — resources.
+`mta::Resource` (`source/sdk/native/resource.hpp`) pairs a name with a VM
+handle that is resolved live on every use: `Resource::find(name)` returns
+nothing for an unknown/stopped resource, `vm()` is never cached. It is also
+a full typed-binder parameter and result. Bundled analogue:
+`source/functions/native/resource_args.cpp`:
+
+```cpp
+// The binder validates the name LIVE through the module manager ABI: an
+// unknown resource is an argument error, never a dangling wrapper.
+MTA_FUNCTION("sample_resource_arg",
+    "Resolves a resource name into mta::Resource (live ABI validation); "
+    "returns its name and alive flag.",
+    [](mta::Resource resource)
+    {
+        return std::make_tuple(resource.name(), resource.alive());
+    });
+
+// Optional form: nil/absent -> nullopt instead of an error.
+// sample_resource_arg_optional, sample_resource_return: same file.
+```
+
+Manual lookup, no binder involved:
+
+```cpp
+if (auto res = mta::Resource::find("play"); res && res->alive())
+{
+    // res->vm() is the live lua_State of that resource
+}
+if (auto self = mta::Resource::current(L))
+{
+    mta::log::info("called from resource ", self->name());
+}
+```
+
+```lua
+sample_resource_arg("play")              -- "play", true
+sample_resource_arg("no_such_resource")  -- error: bad argument #1 to
+                                         --   'sample_resource_arg'
+                                         --   (no running resource 'no_such_resource')
+```
+
+A `Resource` returned to Lua is pushed as its name — the only stable
+Lua-side identity the ABI provides (`sample_resource_return`).
+
+---
+
+## 14. Library usage
+
+`source/library/` is plain C++ shared by your functions (dependency
+direction `functions → library → sdk`; library code never touches Lua and
+never registers functions itself — `source/library/base/README.md`).
+`HandleMap` (`source/library/base/handle_map.hpp`) is the id → handle
+registry you need whenever Lua holds numeric ids (task ids, timer ids, your
+own). Bundled analogue: `source/functions/async/task_demo.cpp`:
+
+```cpp
+#include <mta/sdk.hpp>
+
+#include <library/base/handle_map.hpp>
+
+namespace
+{
+// Live handles of the calling resource; the Store clears the map when the
+// resource stops.
+mta::resources::Store<mta::library::base::HandleMap<std::uint64_t, mta::async::Task>> g_tasks;
+}
+
+// sample_task_run: register the returned handle under its id ...
+const std::uint64_t id = task.id();
+if (!g_tasks.for_state(L).emplace(id, std::move(task)))
+{
+    mta::log::error("sample_task_run: duplicate task id ", id);
+}
+
+// ... sample_task_cancel: find -> cancel -> erase.
+auto *tasks = &g_tasks.for_state(L);
+mta::async::Task *task = tasks->find(static_cast<std::uint64_t>(id));
+if (task == nullptr) { return mta::lua::push_results(L, false); }
+const bool cancelled = task->cancel();
+tasks->erase(static_cast<std::uint64_t>(id));
+```
+
+```lua
+local id = sample_task_run(100, 2, 3, function(sum) print(sum) end)
+sample_task_cancel(id)   -- true:  the completion will never run
+sample_task_cancel(id)   -- false: already cancelled and erased
+```
+
+Organize your own helpers by domain — `library/http/`, `library/json/`,
+… one folder per topic; a new `.cpp` anywhere under `source/` is picked up
+by the build automatically.
+
+---
+
+## 15. Creating a new function / a new object
+
+`mta new` writes compile-ready skeletons into `source/functions/`; the
+registered name is used verbatim, dotted names become underscores in the
+file and C++ identifiers (`other/tools/mta/cli.py`):
+
+```text
+mta new function crypto.sha256   # -> source/functions/crypto_sha256.cpp
+mta new object account           # -> source/functions/account.cpp
+```
+
+`new function` generates an `MTA_FUNCTION` one-liner; `new object` generates
+a struct + `MTA_OBJECT("<name>", …)` + methods + a `<name>_create`
+constructor — the object pattern of §5. The next build picks the file up
+automatically; there is no registration list to edit.
+
+```text
+mta new function greet           # source/functions/greet.cpp is created
+mta new function greet           # error: refusing to overwrite an existing
+                                 #        file: .../source/functions/greet.cpp
+```
+
+A whole new module project is `mta init <name>` — it copies the SDK checkout
+and rewrites `config/module.toml` with the new identity (§1).
+
+---
+
+## 16. Documentation generation
+
+`mta docs` builds the `sdk_docgen` target and dumps the registry metadata —
+function name, description, derived signature (argument/return types,
+optional markers), object methods — as markdown. `--output FILE` writes it
+to a file instead of stdout, `--preset` selects the CMake preset
+(details: api.md, "The `mta` CLI").
+
+```text
+mta docs --output docs/module.md
+```
+
+Body-style functions have no derivable signature: the docgen reports them
+with an explicit `n/a` marker instead of guessing (§9, "module_signature").
+
+---
+
+## 17. Doctor
+
+`mta doctor` checks the environment before you fight the build: TOML
+validity + identity, SDK headers, Lua ABI byte-compare, toolchain probes
+(target architecture), presets, build output, git state — one `[ok]` /
+`[warn]` / `[FAIL]` line per check and a final verdict (details: api.md,
+"The `mta` CLI"). It is the gate the prerequisite at the top of this
+document refers to.
+
+```text
+mta doctor
+MTA Module SDK Doctor
+------------------------------------------------------------
+[ok]   Project            ...
+------------------------------------------------------------
+Status: READY
+```
+
+Failure example: run it outside a module project — the Project check fails
+and the command exits non-zero:
+
+```text
+[FAIL] Project            config/module.toml not found
+------------------------------------------------------------
+Status: NOT READY
+```
+
+---
+
 ## Where each concept is exercised in the repo
 
 | Concept | Sample | Tests |
@@ -485,3 +798,36 @@ MTA_LUA_FUNCTION("clamp", "Clamps value into [lo, hi].")
 | native Resource as binder argument/result | `functions/native/resource_args.cpp` | `060_features.lua` |
 | stress | — | `080_stress.lua` |
 | full restart + shutdown on a real server | `other/server/mta_server.py` | `mta test integration` |
+
+---
+
+## Coverage map: the §39 topic checklist
+
+Task_21 (PROMT.md §39) names ~21 topics for `example.md`. This document
+keeps its walkthrough order instead of one section per topic; every topic
+is still demonstrated in full — here is where each one lives, in this
+document or in the bundled file that exercises it:
+
+| §39 topic | In this document | Bundled code / command |
+|---|---|---|
+| Basic function | §2, §9 | `source/functions/basics/greet.cpp`, `hello.cpp` (`sample_greet`, `sample_hello`) |
+| Multiple arguments | §2, §10 | `basics/minmax.cpp` (`sample_minmax`), `async/task_demo.cpp` (`sample_task_run`) |
+| Optional arguments | §2 | `basics/greet.cpp` (`sample_greet`) |
+| Variadic arguments | §2 | `basics/typed_params.cpp` (`sample_rest_count`), `basics/range.cpp` (`sample_range`) |
+| Return values | §2, §9 | `basics/add.cpp` (`sample_add`), `hello.cpp` |
+| Multiple return values | §10 | `hello.cpp` (`sample_hello_len`), `minmax.cpp` (`sample_minmax`) |
+| Tables | §11 | `tables/table_fields.cpp`, `tables/table_stats.cpp` |
+| Callbacks | §3, §4 | `async/async_add.cpp` (`sample_async_add`) |
+| Async | §3 | `async/task_demo.cpp` (`sample_task_run`) |
+| Timers | §4 | `async/timers.cpp` (`sample_timer`), `async/timer_demo.cpp` (`sample_after`) |
+| Errors | §12, §9 | `basics/range.cpp` (`raise_error`), `source/sdk/errors/errors.hpp` |
+| Resource state | §6 | `state/session.cpp` (`sample_session_hit`) |
+| Objects | §5 | `objects/counter.cpp` |
+| Native MTA types | §13, §7 | `native/resource_args.cpp`, `source/sdk/native/resource.hpp` |
+| Library usage | §14 | `source/library/base/handle_map.hpp` via `async/task_demo.cpp` |
+| Testing | §8 | `mta test`, `other/tests/lua/scripts/*.lua` |
+| Creating a new function | §15 | `mta new function <name>` |
+| Creating a new object | §15 | `mta new object <name>` |
+| Building | §8 | `mta build` |
+| Documentation generation | §16 | `mta docs` |
+| Doctor | §17 | `mta doctor` |

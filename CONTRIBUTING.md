@@ -51,13 +51,25 @@ ctest --preset win-mingw          # or any supported preset
 Run the full suite locally and in CI (Linux GCC, Windows MinGW and MSVC,
 plus a unity build) before opening a pull request.
 
+## Performance changes (measure before optimizing)
+
+Optimize only what a benchmark proves is slow (plan §44): the benchmark
+scripts live in `other/tests/lua/scripts/09*-benchmark*.lua` and run through
+the Lua harness — `mta test --preset <preset> lua` prints an ops/s rate for
+every benchmark. A pull request that claims a performance improvement
+records the affected benchmark, the preset it was measured on and the
+before/after numbers in the PR description; optimizations without measured
+numbers are not accepted.
+
 ## Releases
 
 - Bump the version in `config/module.toml` (`[module] version`) only — the
-  module reports it automatically (CMake derives `project(VERSION)` and
-  `source/sdk/abi/module.cpp` reads it at configure time); add a
-  CHANGELOG.md entry.
-- Pushing a tag like v1.1.0 triggers the Release workflow, which builds
-  base.dll / base.so (whatever SDK_MODULE_NAME is set to), packages ZIP
-  archives and attaches everything to a GitHub Release (see
-  .github/workflows/release.yml).
+  module reports it as the Module version float (plan §38: `source/sdk/abi/
+  module.cpp` compiles it into the binary metadata); the SDK's own version
+  lives separately in `source/sdk/version.hpp` (`SDK_VERSION`/`SDK_ABI_VERSION`).
+  Add a CHANGELOG.md entry.
+- Pushing a tag like v2.0.0 triggers the Release workflow, which builds,
+  tests, runs the (blocking, win-mingw) real-server integration and attaches
+  exactly the module binaries — `<module>.dll` / `<module>.so`, produced by
+  `mta package --release-name` — to a GitHub Release (see
+  .github/workflows/release.yml; plan §36: nothing else ships).

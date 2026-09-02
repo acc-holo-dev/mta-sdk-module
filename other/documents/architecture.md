@@ -140,8 +140,23 @@ the function metadata without a module manager; object methods
 * `lua/protect.hpp` — exception → Lua error conversion and the
   `protected_call` trampoline every registered function runs through.
 * `lua/argument.hpp` / `arguments.hpp` — `Argument`/`Table`/`Arguments`
-  snapshots (tables recursively, 32-level cycle protection) — the only
-  values allowed to cross the async boundary.
+  snapshots (tables recursively, 32-level cycle protection) — the owned half
+  of the value model and the only values allowed to cross the async
+  boundary.
+* `lua/state.hpp` — `mta::state` (alias `mta::LuaView`), the borrowed half
+  of the value model (plan §18/§45): a non-owning wrapper of the
+  **current** `lua_State` for exactly one synchronous call — typed argument
+  readers (`args<Ts...>()`, `check_*`/`opt_*`), `top()`, `resource_name()`,
+  `push_results(...)` — spelled `MTA_STATE(L)` at the call site.
+
+**View vs Snapshot (plan §18/§45).** The two halves are deliberately not
+interchangeable. A *View* (`mta::state`) is borrowed: main thread only,
+valid only while the call runs, never cached, never passed to another
+thread. A *Snapshot* (`mta::lua::{Argument, Table, Arguments}`) is owned:
+it copies its data (strings copied, tables read recursively) and is the
+**only** thing that may cross the async boundary to worker threads and
+back. A raw `lua_State*` never crosses a thread boundary — a resource's VM
+dies with the resource and a restart runs a fresh VM (§4.4, plan §14).
 * `bind/bind.hpp` — the typed binder: reads parameters from the stack
   (`args<double, double>(L)` and lambda parameters), synthesizes
   `optional`/`rest_args`/defaults, applies `context`, pushes results
@@ -312,7 +327,7 @@ Three layers, all green in CI (`ctest --preset win-mingw`):
 2. **Embedded-Lua harness** (`other/tests/lua/harness.cpp`): boots a clean
    Lua 5.1 with the MTA-patched ABI, installs a mock
    `ILuaModuleManager10`, and runs every `other/tests/lua/scripts/*.lua`
-   (`010_basic` … `090_benchmark`), plus C++-level async regressions
+   (`010_basic` … `095_benchmark_userdata`), plus C++-level async regressions
    (task handles, cancellation suppression, ownership drops, queue limits)
    run after the scripts and before module shutdown. This is where restart
    generations are simulated deterministically (`test_resource_restart`
@@ -337,7 +352,45 @@ the environment (headers, Lua ABI byte-compare, toolchain, presets).
 
 ---
 
-## 8. Conventions
+## 8. Performance / benchmarks
+
+Policy (plan §44): **measure before optimizing**. No hot path is tuned on
+intuition — a change that claims a performance win runs the benchmark set
+before and after the change and reports the numbers (see CONTRIBUTING.md).
+The benchmarks are informational Lua scripts in the embedded harness:
+timings are printed, sanity values are asserted, nothing fails on rate.
+
+Benchmark map (`other/tests/lua/scripts/`):
+
+| Script | Measures |
+|---|---|
+| `090_benchmark.lua` | module call throughput (`sample_add`, calls/s) |
+| `091_benchmark_arguments.lua` | argument conversion through the typed binder (2-number baseline, 8 numbers, mixed primitives; derives the per-value conversion cost) |
+| `092_benchmark_tables.lua` | `Table` snapshot roundtrip (read + push) |
+| `093_benchmark_callback.lua` | callback bookkeeping |
+| `094_benchmark_scheduling.lua` | async/timer scheduling |
+| `095_benchmark_userdata.lua` | userdata creation/access |
+
+Cost notes — why the hot paths look the way they do:
+
+* **Snapshot copies** — `Argument`/`Table` copy tables recursively up to
+  `max_table_depth = 32` levels with cycle protection
+  (`source/sdk/lua/argument.{hpp,cpp}`); the copy depth is the cost driver
+  of the snapshot model and what `092` measures.
+* **Task queue and limits** — the scheduler keeps a bounded task queue
+  (`[async] queue` in `config/module.toml`, default 4096): a full queue
+  **rejects** the task into an invalid handle and logs
+  `async: task queue is full (N); task rejected` instead of blocking the
+  caller (`source/sdk/runtime/scheduler.cpp`).
+* **Callback bookkeeping** — a callback is pinned as
+  `(resource, generation, luaL_ref)`; every call re-resolves the VM by
+  resource name and re-checks the generation before firing
+  (`source/sdk/runtime/callback.hpp`) — the price of making
+  stale-generation delivery structurally impossible (§4.4).
+
+---
+
+## 9. Conventions
 
 * **Code style** — `.clang-format`; comments and user-facing strings in
   English; C++20.

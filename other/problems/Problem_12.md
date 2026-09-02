@@ -66,3 +66,33 @@
 6. Зафиксировать процессную норму «оптимизировать только после измерений» в документации проекта (`README.md`/`CONTRIBUTING.md`/`other/documents/*.md`), поскольку сейчас она есть только в `PROMT.md:1705-1707` и `other/tasks/Task_23.md`; добавить benchmark-этап в `.github/workflows` и отдельную benchmark-цель в `CMakeLists.txt`.
 7. Записать baseline-результаты измерений в репозиторий (записанных результатов сейчас нет), чтобы соответствие процессной норме подтверждалось артефактами.
 8. Добавить в документацию отдельный перф-анализ: (а) allocations и Lua stack operations — grep 'allocation' по `other/documents` даёт 0 совпадений; (б) стоимость table snapshots, callback bookkeeping и task queue — сейчас в коде и документах есть только функциональные описания этих механизмов (`scheduler.cpp:293`, `resources.hpp:75`, `argument.hpp:24`), без анализа производительности.
+
+## Статус исправления (2026-09-02)
+
+Несоответствия 1-4 (покрытие benchmark'ами) устранены полностью; несоответствие 5 (процессная норма) устранено документированием; несоответствия 6-7 (перф-анализ) закрыты картой стоимости в архитектуре. Все бенчмарки — informational (тайминги печатаются, sanity-значения ассертятся, порогов на скорость нет), запускаются Lua-харнессом автоматически (`mta test --preset <preset> lua`); реальные измерения выполняются централизованно на этапе тестирования волны и в этот статус не включаются.
+
+### 1. Function call и argument conversion — CLOSED (ранняя волна)
+- `090_benchmark.lua` — сквозной вызов (`sample_add`, 200000 calls, calls/s).
+- `091_benchmark_arguments.lua` — конвертация аргументов отдельно: 2-числовой базовый вызов, 8 чисел (`bench_args_sum8`), смешанные примитивы (`bench_args_mixed`); выводит производную удельную стоимость конвертации одного числа (us) и conversions/s.
+
+### 2. Table conversion и callback — CLOSED
+- Плашка `bench_table_roundtrip` (`source/functions/bench/tables.cpp`: один вызов = полный read+write раундтрип снапшота `mta::lua::Table`) + `092_benchmark_tables.lua` (массив 8/64 элементов, mixed-поля; read-only путь дополнительно через `sample_table_stats`; производная стоимость одного элемента).
+- Плашки `bench_callback_hold/call/release` (`source/functions/bench/callback.cpp`: регистрация `luaL_ref` + bookkeeping / вызов с проверкой generation и pcall / освобождение `luaL_unref`) + `093_benchmark_callback.lua` (hold/call/release по отдельности + производный полный цикл hold→call→release в us).
+
+### 3. Timer scheduling и async scheduling — CLOSED
+- `094_benchmark_scheduling.lua`: (а) async — пост 2000 задач × 6 раундов через `sample_async_add` с полной доставкой через DoPulse (wall-time охватывает постинг + доставку; отдельная строка — чистый enqueue rate); (б) таймеры — 200 одноразовых × 8 раундов через `sample_after` до полного срабатывания; (в) чистое планирование — 1000 таймеров с отложенным срабатыванием, замер только post и гарантированная отмена всех (`sample_after_cancel`). Ожидание доставки ограничено guard-временем — скрипт всегда завершается (паттерн 030/080).
+
+### 4. Userdata creation и access — CLOSED
+- `095_benchmark_userdata.lua`: создание (`counter_create`, чистая стоимость `Registry::create`: userdata + metatable + push) и доступ (`:get()` — чистый dispatch; `:add(1)` — dispatch + конвертация аргумента + push результата); производная стоимость создания объекта в us.
+
+### 5. Норма «оптимизировать только после измерений» — CLOSED (документирована)
+- `CONTRIBUTING.md`, раздел «Performance changes (measure before optimizing)»: бенчмарки запускаются через Lua-харнесс; PR, заявляющий ускорение, обязан указать benchmark, пресет и числа до/после; оптимизации без измерений не принимаются.
+- `other/documents/architecture.md` §8 «Performance / benchmarks»: политика + карта всех шести бенчмарков (090-095) + заметки о стоимости горячих путей.
+
+### 6-7. Перф-анализ (allocations, Lua stack operations, table snapshots, callback bookkeeping, task queue) — CLOSED на уровне проектной карты стоимости
+- `other/documents/architecture.md` §8 «Cost notes»: снапшот-копии таблиц — рекурсивное копирование до `max_table_depth = 32` с защитой от циклов (`source/sdk/lua/argument.{hpp,cpp}`), это главный фактор стоимости снапшот-модели (измеряется 092); очередь задач — ограниченный `[async] queue` (по умолчанию 4096), полное переполнение отклоняет задачу в невалидный handle с логом `async: task queue is full (N); task rejected`, а не блокирует (`source/sdk/runtime/scheduler.cpp`) — цена предсказуемого reject-поведения; callback bookkeeping — тройка `(resource, generation, luaL_ref)` с повторной проверкой при каждом вызове (`source/sdk/runtime/callback.hpp`) — цена структурной невозможности stale-generation доставки.
+- Честное ограничение: сами оптимизации в проекте не выполнялись — измеренные горячих точек нет, поэтому анализ зафиксирован как карта стоимости + обязательный процесс измерений, а не как отчёт о проведённых оптимизациях. Базовые числа фиксируются выводом `mta test lua` (секция `benchmark:`) на этапе тестирования.
+
+### Дополнительные артефакты
+- `source/functions/bench/{args,tables,callback}.cpp` — измерительные плашки (auto-discovery), задокументированные в шапках со ссылками на измеряющие их скрипты.
+- Карта бенчмарков в `other/documents/architecture.md` §8 и политика в `CONTRIBUTING.md`.

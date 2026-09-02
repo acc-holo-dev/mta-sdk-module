@@ -184,3 +184,38 @@ Remote: `https://github.com/acc-holo-dev/mta-sdk-module.git` (origin), ветк�
 - Integration: `other/server/mta_server.py` + `other/tests/integration/`
 - Вендоред тулчейн: `build/toolchain/mingw/mingw64/bin/{cmake,ninja,g++,gcc}.exe`
 - Прошлые успешные логи integration: `other/server/logs/20260902-101542/server.log` (20/20 PASS)
+
+---
+
+## 9. Итог волны 2026-09-02 (дополнено после этого push)
+
+Все пункты To-Do из §4 выполнены:
+
+1. **P5 (View/Snapshot) — закрыта.** Модель LuaView существует как `mta::state`
+   (создана волной P1, см. Problem_1) с явным позиционированием «plan §18/§45 —
+   the LuaView half»; добавлены псевдоним `mta::LuaView`, `arg_count()` и
+   типизированные ридеры `check_*/opt_*` в `source/sdk/lua/state.hpp`;
+   дихотомия View vs Snapshot задокументирована в api.md/architecture.md;
+   статус-раздел в Problem_5.md.
+2. **P9-хвост (§38) — закрыт.** «Дополнение: версии §38» в Problem_9.md;
+   версии разделены в api.md («The four versions») и architecture.md;
+   согласованность version.hpp ↔ cli.py ↔ CMakeLists.txt ↔ install.cmake
+   проверена сопоставлением файлов.
+3. **P12 (benchmarks) — закрыта.** Скрипты `092_benchmark_tables.lua`,
+   `093_benchmark_callback.lua`, `094_benchmark_scheduling.lua`,
+   `095_benchmark_userdata.lua` (все восемь областей §44 теперь покрыты
+   090-095); политика «measure before optimizing» в CONTRIBUTING.md и
+   architecture.md §8; статус-раздел в Problem_12.md. Числа прогонов
+   фиксируются централизованным тестированием после push.
+4. **P10 (документация) — закрыта.** example.md: §10-§17 (Multiple return
+   values, Tables, Errors, Native MTA types, Library usage, Creating new
+   function/object, Documentation generation, Doctor) + карта покрытия 21
+   темы §39 + честное вступление и файлы-аналоги вместо битой ссылки
+   greeter; README.md: ссылки исправлены. Статус-раздел в Problem_10.md.
+5. **Контрольная пере-проверка:** статус-разделы присутствуют во всех 13
+   Problem-файлах (2026-09-02).
+6. CHANGELOG.md обновлён (версии §38, LuaView-ридеры, блокирующий
+   integration в release, `--release-name`, карта бенчмарков, project(VERSION)
+   из version.hpp).
+7. Тестирование/сборка волны выполняются централизованным этапом
+   (запрещено до наступления этапа по плану владельца).

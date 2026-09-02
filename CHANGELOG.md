@@ -8,6 +8,28 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- SDK version facts (plan §38): `source/sdk/version.hpp` is the single source
+  for `SDK_VERSION` ("1.0.0") and `SDK_ABI_VERSION` ("1"); `mta::SdkInfo` /
+  `mta::sdk_info()` expose them, the load diagnostic logs sdk/abi/module/MTA
+  versions separately, `project(VERSION)` now parses `SDK_VERSION` from the
+  header (the Module version float stays with `config/module.toml`), and
+  `mta doctor` reads the same header (`read_sdk_version_header`) to report
+  `SDK version` / `ABI version` as distinct checks.
+- The borrowed state view (plan §18/§45, the LuaView half of the value model)
+  now covers the full synchronous surface: `mta::state` (alias `mta::LuaView`)
+  gained `arg_count()` and the typed readers `check_number/opt_number`,
+  `check_integer/opt_integer`, `check_boolean/opt_boolean`,
+  `check_string/opt_string` with the same conversions and error messages as
+  the free `mta::lua::check_*` helpers; `top()`, `args<Ts...>()`,
+  `push_results(...)` and `resource_name()` were already there.
+- Benchmark suite for the remaining plan §44 areas (informational, printed
+  rates, sanity-asserted): `092_benchmark_tables.lua` (Table snapshot
+  roundtrip via `bench_table_roundtrip`), `093_benchmark_callback.lua`
+  (callback hold/call/release bookkeeping), `094_benchmark_scheduling.lua`
+  (async task + timer scheduling), `095_benchmark_userdata.lua` (userdata
+  creation/access) — joining `090_benchmark.lua` (function call throughput)
+  and `091_benchmark_arguments.lua` (argument conversion) in the lua suite.
+
 - Native MTA types as typed binder arguments/results (plan §6/§17): a
   `mta::Resource` parameter is resolved by name and validated live through
   the module manager on every call (`bind.hpp`), an unknown or already
@@ -46,15 +68,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documented in architecture.md.
 - Release pipeline rework (plan PHASE 14) in `.github/workflows/release.yml`:
   the matrix now covers `linux-gcc`, `win-mingw` and `win-msvc`; every leg
-  builds, runs the unit + lua suites through the CLI, runs the real-server
-  integration as a non-blocking canary (external download/console — the
-  blocking gates are build + tests) and packages with `mta package`. The
-  release attaches exactly the module binaries
-  (`<name>-<version>-<platform>-x64.dll/.so` + printed sha256) — the old
-  CPack ZIP + LICENSE artifacts are gone (plan §36: publish only the
-  module binary). CI (PHASE 13): `mta doctor` job, CLI smoke on Linux
-  (`mta docs`, `mta test unit`, `mta test lua`), a Clang build leg and a
-  real-server integration canary job.
+  builds, runs the unit + lua suites through the CLI, and packages with
+  `mta package`; the release attaches exactly the module binaries under their
+  §36 names (`<module>.dll` / `<module>.so`, via `mta package --release-name`
+  + printed sha256) — the old CPack ZIP + LICENSE artifacts are gone (plan
+  §36: publish only the module binary). The win-mingw leg additionally runs
+  the real-server integration as a BLOCKING step before package/publish (the
+  harness is Windows-only; §37 "relevant integration tests"). CI (PHASE 13):
+  `mta doctor` job, CLI smoke on Linux (`mta docs`, `mta test unit`,
+  `mta test lua`), a Clang build leg and a real-server integration canary job.
 - Documentation rewrite (plan PHASE 12) in `other/documents/`: `example.md`
   (a complete feature walkthrough — sync function, async task, timer,
   object, per-resource state, events, resources — mapped to the bundled
@@ -213,8 +235,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   module identity (`[module]` name/title/author/version), build options
   (`[build]` cxx_standard/unity/lto) and forward-looking `[async]` /
   `[features]` sections. CMake parses the TOML directly before `project()`
-  (`cmake/core/module-config.cmake`), so even `project(VERSION)` comes from
-  the TOML. Explicit `-D` cache entries keep working as overrides.
+  (`cmake/core/module-config.cmake`); `project(VERSION)` follows
+  `SDK_VERSION` in `source/sdk/version.hpp`, keeping the SDK version separate
+  from the Module version (plan §38). Explicit `-D` cache entries keep
+  working as overrides.
 - CTest tests for the TOML reader (`module_config_parse`,
   `module_config_rejects_garbage`).
 
