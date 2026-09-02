@@ -152,10 +152,20 @@ jobs:
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
 
+      # The CLI/harness run through the runner's native Python (the MSYS2
+      # environment has no Python); the MinGW toolchain the build needs comes
+      # from the UCRT64 environment and is put on PATH -- the same layout the
+      # release workflow uses (plan PHASE 14).
+      - name: Put the MinGW toolchain on PATH
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH 'C:\msys64\ucrt64\bin'
+
       - name: Build the module
-        shell: msys2 {0}
+        shell: pwsh
         run: python other/tools/mta/cli.py build --preset win-mingw
 
       - name: Install the pinned server and run the integration
-        shell: msys2 {0}
-        run: python other/tools/mta/cli.py server install && python other/tools/mta/cli.py test integration
+        shell: pwsh
+        run: |
+          python other/tools/mta/cli.py server install
+          python other/tools/mta/cli.py test integration

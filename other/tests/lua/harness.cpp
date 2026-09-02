@@ -388,6 +388,11 @@ void run_async_regressions(lua_State *script_vm)
 
 int main()
 {
+    // Unbuffered stdout: when the process dies by fail-fast (MSVC reports
+    // such crashes as exit code 0xc0000409), a buffered tail would be lost
+    // and the CI log would show nothing before the exception.
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+
     // The vendored Lua is MTA's patched 5.1: luaL_newstate takes the state's
     // owner (mtasaowner) - nullptr for a module-owned state. Passing it lets
     // the state be created exactly like the real server does, and the check
@@ -446,6 +451,7 @@ int main()
 
     run_async_regressions(lua_vm);
 
+    std::printf("harness: C++ async regressions done; shutting down\n");
     mta::module::shutdown();
 
     // The module is shut down and the manager no longer hands out VMs; close
