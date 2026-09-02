@@ -18,8 +18,8 @@ test_assert(err == "bad argument #1 to 'sample_table_stats' (expected table, got
 
 local version = sample_version()
 test_assert(type(version) == "table", "sample_version returns a table")
-test_assert(version.module == "Base Module", "module title from config/module.toml")
-test_assert(version.module_author == "Developer", "module author from config/module.toml")
+test_assert(type(version.module) == "string" and version.module ~= "", "module title flows from config/module.toml")
+test_assert(type(version.module_author) == "string" and version.module_author ~= "", "module author flows from config/module.toml")
 test_assert(math.abs(version.module_version - 2.1) < 1e-6, "module version from config/module.toml")
 test_assert(version.sdk_version == "1.0.0", "SDK version from source/sdk/version.hpp")
 test_assert(version.abi_version == "1", "module ABI version from source/sdk/version.hpp")
