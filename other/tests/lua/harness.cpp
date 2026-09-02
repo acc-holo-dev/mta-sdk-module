@@ -21,6 +21,7 @@
 #include "sdk/lua/common.hpp"
 #include "sdk/lua/argument.hpp"
 #include "sdk/abi/module.hpp"
+#include "sdk/runtime/scheduler.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -300,6 +301,89 @@ void register_test_helpers(lua_State *lua_vm)
     lua_register(lua_vm, "test_fresh_vm_get", test_fresh_vm_get);
     lua_register(lua_vm, "test_resource_restore", test_resource_restore);
 }
+
+// --- C++-side async task regressions (plan §13/§14) ----------------------------
+
+void expect(bool condition, const char *message)
+{
+    if (condition)
+    {
+        ++g_passed;
+        return;
+    }
+    std::printf("  REGRESSION FAILED: %s\n", message);
+    ++g_failed;
+}
+
+void run_async_regressions(lua_State *script_vm)
+{
+    using mta::async::Task;
+    std::printf("== async task regressions (C++)\n");
+
+    // run() -> valid handle -> main-thread completion -> done()
+    bool delivered = false;
+    Task task = mta::async::run(
+        script_vm,
+        [] {
+            mta::lua::Arguments result;
+            result.push_number(1);
+            return result;
+        },
+        [&](const mta::lua::Arguments &, const char *error) { delivered = (error == nullptr); });
+    expect(task.valid(), "run() returns a valid handle");
+    expect(!task.done(), "queued task is not done yet");
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    mta::module::pulse();
+    expect(delivered, "completion delivered on the main thread");
+    expect(task.done(), "delivered task reports done()");
+    expect(!task.cancel(), "cancelling a finished task reports false");
+
+    // cancellation suppresses the completion (plan §13)
+    bool cancelled_delivery = false;
+    Task task2 = mta::async::run(
+        script_vm,
+        [] { std::this_thread::sleep_for(std::chrono::milliseconds(80)); return mta::lua::Arguments{}; },
+        [&](const mta::lua::Arguments &, const char *) { cancelled_delivery = true; });
+    expect(task2.cancel(), "a queued/running task accepts cancellation");
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    mta::module::pulse();
+    expect(!cancelled_delivery, "a cancelled task never runs its completion");
+    expect(task2.done(), "a cancelled task reports done()");
+
+    // resource ownership (plan §14): the completion of a finished generation
+    // never runs
+    bool owned_delivery = false;
+    Task task3 = mta::async::run(
+        script_vm,
+        [] { std::this_thread::sleep_for(std::chrono::milliseconds(80)); return mta::lua::Arguments{}; },
+        [&](const mta::lua::Arguments &, const char *) { owned_delivery = true; });
+    mta::module::resource_stopping(script_vm);
+    mta::module::resource_stopped(script_vm);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    mta::module::pulse();
+    expect(!owned_delivery, "a completion is dropped after its resource stopped");
+
+    // queue limit (plan §13): a full queue rejects tasks instead of blocking.
+    // With W workers (auto: at most 8) and queue limit 2, posting 20 slow
+    // tasks rejects at least 20 - 8 - 2 = 10 of them deterministically.
+    mta::async::Scheduler::instance().configure(2);
+    int rejected = 0;
+    for (int i = 0; i < 20; ++i)
+    {
+        Task blocker = mta::async::run(
+            script_vm,
+            [] { std::this_thread::sleep_for(std::chrono::milliseconds(100)); return mta::lua::Arguments{}; },
+            [](const mta::lua::Arguments &, const char *) {});
+        if (!blocker.valid())
+        {
+            ++rejected;
+        }
+    }
+    expect(rejected >= 10, "a full task queue rejects tasks beyond the limit");
+    mta::async::Scheduler::instance().configure(4096); // repo module.toml value
+    std::this_thread::sleep_for(std::chrono::milliseconds(2600));
+    mta::module::pulse();
+}
 } // namespace
 
 int main()
@@ -359,6 +443,8 @@ int main()
         }
         lua_gc(lua_vm, LUA_GCCOLLECT, 0);
     }
+
+    run_async_regressions(lua_vm);
 
     mta::module::shutdown();
 

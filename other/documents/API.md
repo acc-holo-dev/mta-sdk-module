@@ -197,18 +197,21 @@ bool call(const mta::lua::Arguments&) const;         // call; false if the resou
 
 ## mta::async::Scheduler
 
-Background tasks with results delivered on the main thread (DoPulse).
+Internal task engine: background work with results delivered on the main
+thread (DoPulse). Lua is never called from a worker thread.
 
 ```cpp
 static Scheduler& instance();
-void start();      // spawn workers (called at initialization)
-void stop();       // stop workers and clear queues (shutdown)
+void start();      // spawn workers ([async] workers in config/module.toml)
+void stop();       // stop workers, cancel queued tasks (shutdown)
 void pump();       // main thread: dispatch results, fire timers
 
-void post_task(std::function<Arguments()> work,
-               std::function<void(const Arguments&, const char*)> completion);
+[[nodiscard]] Task post_task(std::function<Arguments()> work,
+                std::function<void(const Arguments&, const char*)> completion,
+                std::string resource = {}, std::uint64_t generation = 0);
 // work — on a worker (NO Lua!), completion — on the main thread;
-// error == nullptr on success.
+// error == nullptr on success. The task is owned by (resource, generation)
+// when a resource is given. Invalid handle when the queue is full.
 
 std::uint64_t post_timer(std::string resource, int delay_ms, int repeat_count,
                          std::function<void(std::uint64_t)> completion);
@@ -216,8 +219,32 @@ std::uint64_t post_timer(std::string resource, int delay_ms, int repeat_count,
 
 bool cancel_timer(std::uint64_t id);
 void handle_resource_stopped(const std::string& resource);
+void configure(std::size_t queue_limit);  // runtime override of [async] queue
 bool running() const;
 ```
+
+## mta::async::run / Task
+
+Developer-facing task API (plan §13): background work with a cancellable
+handle and automatic resource ownership (plan §14).
+
+```cpp
+[[nodiscard]] Task run(lua_State* L,
+                       std::function<Arguments()> work,
+                       std::function<void(const Arguments&, const char*)> completion);
+
+class Task {
+    bool cancel();   // queued: never runs; running: result delivery suppressed
+    bool done();     // nothing more will happen (done/cancelled)
+    bool valid();    // false for a default handle / queue-full rejection
+    std::uint64_t id();
+};
+```
+
+The task is owned by the calling resource: when the resource stops, queued
+tasks are cancelled and completions of the finished generation are dropped
+before any Lua access. Queue limits come from `[async] queue`; worker count
+from `[async] workers` (`"auto"` = hardware probe, clamped to 1..8).
 
 ## mta::resources::Store<T>
 

@@ -97,10 +97,27 @@ if(PROJECT_VERSION MATCHES "^([0-9]+)\\.([0-9]+)")
 else()
   set(SDK_MODULE_VERSION "${PROJECT_VERSION}")
 endif()
+# [async] runtime knobs (plan §4/§13): worker count and task-queue limit are
+# compiled in from config/module.toml so the module and its config stay one
+# source of truth. workers = "auto" compiles to a hardware-concurrency probe.
+set(SDK_ASYNC_WORKERS_CFG "${MODULE_CFG_async_workers}")
+if(SDK_ASYNC_WORKERS_CFG STREQUAL "auto")
+  set(SDK_ASYNC_WORKER_DEFINES SDK_ASYNC_WORKERS_AUTO=1)
+else()
+  set(SDK_ASYNC_WORKER_DEFINES "SDK_ASYNC_WORKERS_N=${SDK_ASYNC_WORKERS_CFG}")
+endif()
+if(NOT MODULE_CFG_async_queue)
+  set(SDK_ASYNC_QUEUE_N 4096)
+else()
+  set(SDK_ASYNC_QUEUE_N "${MODULE_CFG_async_queue}")
+endif()
+
 target_compile_definitions(sdk_core PRIVATE
     SDK_MODULE_VERSION="${SDK_MODULE_VERSION}"
     "SDK_MODULE_TITLE=\"${SDK_MODULE_TITLE}\""
     "SDK_MODULE_AUTHOR=\"${SDK_MODULE_AUTHOR}\""
+    ${SDK_ASYNC_WORKER_DEFINES}
+    "SDK_ASYNC_QUEUE_N=${SDK_ASYNC_QUEUE_N}"
 )
 
 target_include_directories(sdk_core

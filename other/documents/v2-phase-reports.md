@@ -230,3 +230,47 @@ newest last.
 - **NEXT**: PHASE 6 — Async V2: task handle (cancel/done/valid), queue
   limits consuming `[async] queue`, worker count from `[async] workers`,
   resource ownership and safe shutdown.
+
+## PHASE 6 — Async V2 (task handle, queue limits, ownership)
+
+- **PHASE**: 6 — developer-facing task API over the internal Scheduler
+  (plan §13), resource ownership §14, queue limits and worker config §4.
+- **CHANGED**:
+  - `sdk/runtime/scheduler.{hpp,cpp}` reworked: `post_task` returns a
+    `Task` handle, accepts optional (resource, generation) ownership; the
+    worker loop honors cooperative cancellation (a cancelled queued task is
+    skipped without running; a cancelled running one never delivers);
+    completions carry their (resource, generation) and `pump()` drops them
+    when the VM is gone or the generation ended (no Lua access, §14);
+    `stop()` cancels every queued task so handles report `done()`;
+    `configure(queue_limit)` allows runtime adjustment (used by tests);
+    worker count from `[async] workers` ("auto" = hardware probe clamped
+    1..8), queue limit from `[async] queue` — both compiled in via
+    `SDK_ASYNC_WORKERS_AUTO/_N` and `SDK_ASYNC_QUEUE_N`.
+  - `sample_async_add` migrated to `mta::async::run` and returns whether the
+    task was accepted.
+  - `CMakeLists.txt`: `[async]` values passed as compile definitions.
+  - API.md: Scheduler/Task sections rewritten.
+- **ADDED**:
+  - `sdk/runtime/task.hpp` — `TaskState`/`Task` shared handle (cancel/done/
+    valid/id) with documented semantics.
+  - `mta::async::run(lua_State*, work, completion)` — the developer API:
+    resource attribution + cancellable handle.
+  - `source/functions/async/task_demo.cpp` — `sample_task_run`
+    (per-resource task registry via `resources::Store`) and
+    `sample_task_cancel`.
+  - `other/tests/lua/scripts/035_task.lua` — cancel-before-delivery,
+    delivery, unknown-id cancel, ownership across a resource stop.
+  - Harness C++ regressions (`run_async_regressions`): valid/done flow,
+    cancellation suppression, ownership drop, queue limit (20 slow posts,
+    limit 2 -> >= 10 rejected deterministically for any worker count <= 8).
+- **REMOVED**: nothing public; `post_task`'s void return replaced by Task
+  (old fire-and-forget callers keep working).
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (143 assertions + C++
+  regressions; suite now ~7.5s due to timing margins).
+- **RISKS**: cancellation is cooperative — running work cannot be
+  interrupted, only its delivery suppressed (documented on the handle and in
+  API.md); the queue limit counts only QUEUED tasks (running ones are
+  already being paid for); worker count is fixed at start (module load).
+- **NEXT**: PHASE 7 — Timer V2: `mta::timer::after()/every()` with
+  `.cancel()/.valid()` handles (plan §15).

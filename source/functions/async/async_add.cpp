@@ -1,6 +1,6 @@
 // Async pattern: compute on a worker, deliver the result through a callback
-// via DoPulse. The Callback is just a typed parameter; the framework binds the
-// Lua function to the resource and survives its restarts.
+// via DoPulse. The Callback is just a typed parameter; the task is owned by
+// the calling resource and survives its restarts within one generation.
 
 #include <mta/sdk.hpp>
 
@@ -16,7 +16,8 @@ MTA_LUA_FUNCTION("sample_async_add",
     // wrapped in make_shared when captured into the completion.
     auto cb = std::make_shared<mta::async::Callback>(std::move(callback));
 
-    mta::async::Scheduler::instance().post_task(
+    const mta::async::Task task = mta::async::run(
+        L,
         [a, b]() -> mta::lua::Arguments {
             mta::lua::Arguments result;
             result.push_number(a + b);
@@ -31,5 +32,11 @@ MTA_LUA_FUNCTION("sample_async_add",
             cb->call(result);
         });
 
-    return mta::lua::push_results(L, true);
+    // run() returns a cancellable handle; a full queue rejects the task.
+    if (!task.valid())
+    {
+        mta::log::error("sample_async_add: task queue is full");
+    }
+
+    return mta::lua::push_results(L, task.valid());
 }

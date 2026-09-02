@@ -8,6 +8,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Async V2 task API (plan §13/§14): `mta::async::run(L, work, completion)`
+  returns a cancellable `Task` handle (`cancel()/done()/valid()/id()`);
+  cooperative cancellation suppresses the completion; the task is owned by
+  the calling resource — a stop cancels queued tasks and drops completions
+  of the finished generation before any Lua access.
+- Queue limits and worker count from `config/module.toml` `[async]`
+  (`queue = 4096`, `workers = "auto"` compiled into the module): a full
+  queue rejects the task with an invalid handle instead of blocking.
+- Samples `sample_task_run`/`sample_task_cancel` (per-resource task
+  registry) and Lua test `035_task.lua`; C++ harness regressions for the
+  handle semantics, ownership and the queue limit.
 - ResourceContext generations (plan §11/§33, P0): every resource stop ends
   the VM generation (`Hub::generation`/`bump_generation`). Callbacks, async
   task completions and timers record the generation they were created in and
@@ -22,6 +33,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `Scheduler::post_task` returns a `Task` handle and takes optional
+  (resource, generation) ownership; `sample_async_add` migrated to
+  `mta::async::run` and reports queue-full rejections.
 - `Callback` identity is now (resource, generation, ref): stale callbacks
   are dropped with a debug log, and releasing a stale callback never
   untracks the live callback that reused its index.
