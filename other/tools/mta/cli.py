@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mta -- the MTA Module SDK project CLI (plan PROMT.md §24-§30).
+"""mta -- the MTA Module SDK project CLI (plan PROMT.md В§24-В§30).
 
 Commands:
     mta init <name>            scaffold a new module project
@@ -36,7 +36,7 @@ SELF = Path(__file__).resolve()
 SDK_ROOT = SELF.parents[3]  # other/tools/mta/cli.py -> the SDK checkout root
 
 # NOTE: there is no SDK version constant here. The SDK version and the module
-# ABI version (plan §38) are read from source/sdk/version.hpp -- the single
+# ABI version (plan В§38) are read from source/sdk/version.hpp -- the single
 # source of truth shared with the C++ SDK and CMake's project(VERSION). See
 # read_sdk_version_header() below.
 
@@ -220,7 +220,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         ),
     )
 
-    # Rewrite the module identity: the name is developer-owned (plan §5).
+    # Rewrite the module identity: the name is developer-owned (plan В§5).
     toml_path = target / "config" / "module.toml"
     text = toml_path.read_text(encoding="utf-8")
     title = name.replace("-", " ").replace("_", " ").title()
@@ -315,7 +315,7 @@ def cmd_new(args: argparse.Namespace) -> int:
         path = root / "source" / "functions" / f"{file_name}.cpp"
         # C++ identifiers must be valid: dotted names become underscores there,
         # while the REGISTERED names (create function, MTA_OBJECT id) stay
-        # verbatim (plan §26/§27).
+        # verbatim (plan В§26/В§27).
         template = OBJECT_TEMPLATE.format(name=name, type=type_name, ident=file_name)
 
     if path.exists():
@@ -372,7 +372,7 @@ def integration_ready(root: Path) -> tuple[bool, str]:
     """Whether the real-server integration suite can run in this environment.
 
     The pinned server (other/server/) only runs on the platform recorded in
-    install.json; elsewhere the suite is reported NOT RUN (plan §28/§29
+    install.json; elsewhere the suite is reported NOT RUN (plan В§28/В§29
     example: "integration NOT RUN"), which must not fail the `all` run.
     """
     if not (root / "other" / "server" / "mta_server.py").is_file():
@@ -411,7 +411,7 @@ def cmd_test(args: argparse.Namespace) -> int:
         # unit -> module_config ctest tests, lua -> sdk_tests (CI calls both).
         return run_ctest(root, preset, "module_config" if what == "unit" else "sdk_tests")
 
-    # suite == "all" (plan §29): unit + lua + integration with explicit
+    # suite == "all" (plan В§29): unit + lua + integration with explicit
     # per-suite sections. An environment that cannot run the integration
     # (harness missing, pinned server not installed or foreign platform)
     # skips it as NOT RUN instead of failing the whole run.
@@ -482,7 +482,7 @@ def check(name: str, status: str, detail: str = "") -> tuple[str, str, str]:
 
 
 def normalize_arch(machine: str) -> str:
-    """CMake-style arch tag, matching cmake/core/platform.cmake (x86_64|amd64 -> x64)."""
+    """CMake-style arch tag, matching config/cmake/core/platform.cmake (x86_64|amd64 -> x64)."""
     lowered = machine.strip().lower()
     if lowered.startswith(("x86_64", "amd64")) or lowered == "x64":
         return "x64"
@@ -494,10 +494,10 @@ def normalize_arch(machine: str) -> str:
 
 
 def probe_architecture(root: Path) -> tuple[str | None, str]:
-    """Target architecture of the toolchain (plan §28 "Architecture").
+    """Target architecture of the toolchain (plan В§28 "Architecture").
 
     Probes the compiler itself -- not the installed MTA server -- the same
-    way the build tags its output (cmake/core/platform.cmake). Returns
+    way the build tags its output (config/cmake/core/platform.cmake). Returns
     (architecture like "x64", detail) or (None, reason).
     """
     gpp = which("g++", root)
@@ -520,7 +520,7 @@ def probe_architecture(root: Path) -> tuple[str | None, str]:
 
 
 def read_sdk_version_header(root: Path | None = None) -> dict[str, str]:
-    """The SDK version facts (plan §38) from source/sdk/version.hpp.
+    """The SDK version facts (plan В§38) from source/sdk/version.hpp.
 
     That header is the single source of truth for the SDK version and the
     MTA module ABI version: the C++ SDK includes it, CMake parses it for
@@ -565,7 +565,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             findings.append(check("Project", FAIL, "config/module.toml is invalid"))
             config = None
 
-    # SDK version + module ABI version (plan §38) ---------------------------------
+    # SDK version + module ABI version (plan В§38) ---------------------------------
     # Parsed from source/sdk/version.hpp -- the header the C++ SDK includes
     # and CMake's project(VERSION) follows -- so doctor reports the same
     # facts the build compiles in. They are separate entities from the
@@ -630,7 +630,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     findings.append(check("Compiler", OK if compiler_loc else FAIL, compiler_ver or "not found"))
 
     # Architecture: the toolchain's target, not the installed server's
-    # (plan §28 lists it next to the compiler).
+    # (plan В§28 lists it next to the compiler).
     arch, arch_detail = probe_architecture(root)
     if compiler_loc is None:
         findings.append(check("Architecture", WARN, "unknown (no compiler found)"))
@@ -731,7 +731,7 @@ def cmd_package(args: argparse.Namespace) -> int:
     dist.mkdir(exist_ok=True)
     if args.release_name:
         # Release artifacts carry exactly the developer-defined module name:
-        # <module>.dll / <module>.so (plan §36; e.g. my_module.dll).
+        # <module>.dll / <module>.so (plan В§36; e.g. my_module.dll).
         target = dist / f"{module_tbl['name']}{binary.suffix}"
     else:
         target = dist / f"{module_tbl['name']}-{version}-{platform_tag}-x64{binary.suffix}"
@@ -797,7 +797,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--release-name",
         action="store_true",
-        help="name the artifact exactly <module>.dll/.so (plan §36) "
+        help="name the artifact exactly <module>.dll/.so (plan В§36) "
         "instead of <module>-<version>-<platform>-x64",
     )
     p.set_defaults(func=cmd_package)

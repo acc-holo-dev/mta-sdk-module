@@ -1,6 +1,6 @@
-# Module project configuration — the single source of truth (plan §4/§5).
+# Module project configuration вЂ” the single source of truth (plan В§4/В§5).
 #
-# The CMake build reads this file directly (cmake/core/module-config.cmake);
+# The CMake build reads this file directly (config/cmake/core/module-config.cmake);
 # the `mta` CLI reads the same file. Module identity (name, title, author,
 # version) is defined ONLY here: it flows into the built binary
 # (base.dll / base.so), the MTA registration, metadata, packaging and

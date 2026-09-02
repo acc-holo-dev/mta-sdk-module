@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.27)
 
 # ---------------------------------------------------------------------------
 # config/module.toml is the single source of truth for module identity and
-# build options (plan PROMT.md §4/§5). It is read BEFORE project() so that
+# build options (plan PROMT.md В§4/В§5). It is read BEFORE project() so that
 # module identity flows into the build. Explicit CMake cache entries
 # (-DSDK_MODULE_NAME=... etc.) remain as per-configure overrides.
 # ---------------------------------------------------------------------------
-include(cmake/core/module-config.cmake)
+include(config/cmake/core/module-config.cmake)
 read_module_toml("${CMAKE_CURRENT_SOURCE_DIR}/config/module.toml" MODULE_CFG)
 
-# The project is the SDK template. §38 keeps the SDK version separate from the
+# The project is the SDK template. В§38 keeps the SDK version separate from the
 # Module version, so project(VERSION) does NOT come from config/module.toml:
 # it follows SDK_VERSION in source/sdk/version.hpp -- the same single source
 # the C++ SDK includes and the CLI parses for `mta doctor`.
@@ -54,7 +54,7 @@ option(SDK_BUILD_TESTS "Build the embedded Lua test harness (sdk_tests)" ON)
 option(SDK_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
 
 # ---------------------------------------------------------------------------
-# Module identity — authored in config/module.toml [module]; renaming the
+# Module identity вЂ” authored in config/module.toml [module]; renaming the
 # module never touches C++ or CMake. The cache variables below are optional
 # per-configure overrides:
 #
@@ -80,15 +80,15 @@ endif()
 
 find_package(Threads REQUIRED)
 
-include(cmake/core/platform.cmake)
-include(cmake/core/common.cmake)
-include(cmake/lua/lua.cmake)
-include(cmake/core/file.cmake)
+include(config/cmake/core/platform.cmake)
+include(config/cmake/core/common.cmake)
+include(config/cmake/lua/lua.cmake)
+include(config/cmake/core/file.cmake)
 
 # ---------------------------------------------------------------------------
-# [features] (plan §4): subsystem switches. They flow into the build as
+# [features] (plan В§4): subsystem switches. They flow into the build as
 # SDK_FEATURE_* compile definitions, and the bundled sample functions of a
-# disabled subsystem are excluded from the module (and the test binary) —
+# disabled subsystem are excluded from the module (and the test binary) вЂ”
 # the developer decides what the built module ships, only in module.toml.
 # Explicit cache overrides win: -DSDK_FEATURE_ASYNC=OFF, ...
 # ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/.cache/${SDK_PLATFORM_TA
 # ---------------------------------------------------------------------------
 add_library(sdk_core OBJECT ${SDK_SOURCES})
 
-# Single source of truth for the MODULE version float (§38: Module version is
+# Single source of truth for the MODULE version float (В§38: Module version is
 # its own entity, separate from the SDK version that project(VERSION) now
 # carries): the [module] version in config/module.toml. "2.0.0" becomes the
 # float "2.0" reported by sample_version / module_details / InitModule --
@@ -143,7 +143,7 @@ if(MODULE_CFG_module_version MATCHES "^([0-9]+)\\.([0-9]+)")
 else()
   set(SDK_MODULE_VERSION "${MODULE_CFG_module_version}")
 endif()
-# [async] runtime knobs (plan §4/§13): worker count and task-queue limit are
+# [async] runtime knobs (plan В§4/В§13): worker count and task-queue limit are
 # compiled in from config/module.toml so the module and its config stay one
 # source of truth. workers = "auto" compiles to a hardware-concurrency probe.
 # Explicit cache overrides win: -DSDK_ASYNC_WORKERS=4 -DSDK_ASYNC_QUEUE=1024.
@@ -197,7 +197,7 @@ endif()
 
 sdk_target_apply_baseline_options(sdk_core)
 
-# Sanitizers (ASan/UBSan) — for debugging only, not for the production module.
+# Sanitizers (ASan/UBSan) вЂ” for debugging only, not for the production module.
 if(SDK_SANITIZE)
   if(MSVC)
     message(WARNING "SDK_SANITIZE is supported only on GCC/Clang")
@@ -240,16 +240,16 @@ sdk_target_apply_baseline_options(sdk_base)
 sdk_enable_lto(sdk_base)
 
 if(MSVC)
-  include(cmake/config/msvc.cmake)
+  include(config/cmake/platform/msvc.cmake)
 elseif(MINGW)
-  include(cmake/config/mingw.cmake)
+  include(config/cmake/platform/mingw.cmake)
 elseif(UNIX)
-  include(cmake/config/linux.cmake)
+  include(config/cmake/platform/linux.cmake)
 endif()
 
 # ---------------------------------------------------------------------------
 # Embedded test harness: runs every module function in clean Lua 5.1 with a
-# mock manager — no MTA server needed.
+# mock manager вЂ” no MTA server needed.
 # ---------------------------------------------------------------------------
 if(SDK_BUILD_TESTS)
   enable_testing()
@@ -281,7 +281,7 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Registry documentation generator: dumps every registered function with its
-# signature metadata (plan §9) as markdown; `mta docs` builds and runs it.
+# signature metadata (plan В§9) as markdown; `mta docs` builds and runs it.
 # ---------------------------------------------------------------------------
 add_executable(sdk_docgen other/tools/docgen.cpp)
 target_link_libraries(sdk_docgen PRIVATE sdk_core mta_lua)
@@ -292,5 +292,5 @@ target_include_directories(sdk_docgen PRIVATE
 sdk_target_apply_baseline_options(sdk_docgen)
 sdk_enable_lto(sdk_docgen)
 
-# Install rules + packaging for releases (see cmake/install.cmake).
-include(cmake/install.cmake)
+# Install rules + packaging for releases (see config/cmake/install.cmake).
+include(config/cmake/install.cmake)

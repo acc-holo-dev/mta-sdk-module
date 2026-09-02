@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.27)
 
-include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/core/module-config.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../../config/cmake/core/module-config.cmake")
 
 read_module_toml("${CMAKE_CURRENT_LIST_DIR}/fixtures/garbage.toml" BAD)
 

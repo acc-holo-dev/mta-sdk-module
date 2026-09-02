@@ -1,9 +1,9 @@
-# Unit test: cmake/core/module-config.cmake TOML reader.
+# Unit test: config/cmake/core/module-config.cmake TOML reader.
 # Run by CTest: cmake -P module_config_parse.cmake (exit code 0 = pass).
 
 cmake_minimum_required(VERSION 3.27)
 
-include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/core/module-config.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../../config/cmake/core/module-config.cmake")
 
 set(_fixture "${CMAKE_CURRENT_LIST_DIR}/fixtures/module.toml")
 read_module_toml("${_fixture}" CFG)
