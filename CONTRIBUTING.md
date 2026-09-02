@@ -1,75 +1,103 @@
 # Contributing
 
-Thanks for improving the module SDK! This short guide explains where things
-live and what conventions to keep.
+Thanks for improving the module SDK! This guide explains where things live,
+which conventions to keep and how to verify a change.
 
 ## Project layout
 
-- source/sdk/abi/ — MTA lifecycle hooks (init, pulse, resource events).
-- source/sdk/lua/ — Lua-stack helpers; the typed binder is at
-  source/sdk/bind/bind.hpp.
-- source/sdk/registry/ — the function registry and the
-  MTA_LUA_FUNCTION / MTA_LUA_FUNC macros.
-- source/sdk/runtime/ — scheduler and callbacks; per-resource state lives in
-  source/sdk/resources/, logging in source/sdk/logging/.
-- source/functions/ — your functions, grouped by domain.
-- source/library/ — reusable non-Lua C++ helpers (functions may use them;
-  they must not depend on functions).
-- other/tests/ — lua/ (embedded harness + scripts), unit/, integration/.
-- other/third_party/ — vendored Lua 5.1 and the MTA SDK headers (keep
-  untouched).
-- cmake/ — build infrastructure.
+- `source/sdk/` — the framework. `abi/` (MTA lifecycle hooks), `lua/`
+  (value/stack layer), `bind/` (typed binder), `runtime/` (scheduler,
+  callbacks, timers), `registry/` (function registry + registration
+  macros), `objects/` (userdata), `resources/` (resource identity and
+  generations), `events/`, `logging/`, `errors/`.
+- `source/mta/sdk.hpp` — the public facade. Developer code includes only
+  this header.
+- `source/functions/` — developer functions, grouped by domain. The bundled
+  samples live here too and double as the Lua suite's fixtures.
+- `source/library/` — reusable, module-agnostic C++ helpers. Functions may
+  use the library; the library must never depend on functions or the SDK.
+- `config/module.toml` — module identity and build options (single source).
+- `config/cmake/` — the CMake implementation (core, lua, platform, install).
+- `other/tests/` — `lua/` (embedded harness + scripts), `unit/`
+  (CMake-script tests), `integration/` (real-server scenarios).
+- `other/server/` — pinned MTA server test infrastructure (not tests
+  themselves; no binaries are committed).
+- `other/tools/` — the `mta` CLI and the docs generator.
+- `other/third_party/` — vendored Lua 5.1 and MTA SDK server headers.
+  Never modify vendored sources without a concrete compatibility reason.
+
+## Where new code goes
+
+| You are adding... | Location |
+| --- | --- |
+| a Lua-callable function | `source/functions/<domain>/<name>.cpp` |
+| a reusable object type | `source/functions/<domain>/` (`MTA_OBJECT` + `MTA_METHOD`) |
+| a non-Lua utility shared by functions | `source/library/<topic>/` |
+| an SDK framework capability | `source/sdk/<layer>/` |
+| a test | `other/tests/lua/scripts/`, `other/tests/unit/`, `other/tests/integration/` |
 
 ## Adding a function
 
-1. Drop a .cpp anywhere under source/functions/<domain>/ using one of the two
-   registration macros (see README.md, "Writing functions").
-2. Rebuild — new files and their registration are picked up automatically.
-3. Add a Lua test script under other/tests/lua/scripts/ (naming:
-   NNN_name.lua); the harness runs every script automatically.
-
-## Requirements
-
-- C++20, no dependencies beyond std::thread and Lua 5.1.
-- Keep the module ABI-clean: never store lua_State* between calls and never
-  touch Lua from worker threads (use mta::async::Callback / Store).
-- Error messages should be human-readable English; prefer raise_error over
-  luaL_error.
+1. Run `mta new function <name>` (or drop a `.cpp` under
+   `source/functions/<domain>/` with one of the registration macros — see
+   `other/documents/example.md`).
+2. Rebuild: new files and their registrations are picked up automatically.
+3. Add a Lua test script under `other/tests/lua/scripts/` (naming:
+   `NNN_name.lua`); the harness runs every script automatically.
 
 ## Code style
 
-- Follow .clang-format (and .editorconfig for line endings).
-- Comments in English.
-- New user-facing strings (descriptions, error messages) in English.
+- Follow `.clang-format` and `.editorconfig` (LF line endings).
+- Comments in English; explain why, lifetimes, ownership, thread rules and
+  ABI constraints — not what the code visibly does.
+- User-facing strings (descriptions, error messages) in English.
+- C++20; no dependencies beyond the standard library, the vendored Lua and
+  the MTA SDK headers.
+- Keep the module ABI-clean: never store a `lua_State*` between calls and
+  never touch Lua from worker threads (use the async completion / callback
+  APIs).
+- Prefer `mta::errors::raise_error` / `raise` over raw `luaL_error` so
+  errors stay renderable at the trampoline boundary.
 
 ## Testing
 
 ```bash
-ctest --preset win-mingw          # or any supported preset
+mta test unit            # configuration parser tests
+mta test lua             # embedded Lua harness: functions + regressions
+mta test integration     # pinned real MTA server (after `mta server install`)
+mta doctor               # environment readiness
 ```
 
-Run the full suite locally and in CI (Linux GCC, Windows MinGW and MSVC,
-plus a unity build) before opening a pull request.
+Run the suites for the platforms you touched before opening a pull request;
+CI covers Linux GCC/Clang and Windows MinGW-w64/MSVC plus the real-server
+integration.
 
-## Performance changes (measure before optimizing)
+### Performance changes (measure before optimizing)
 
-Optimize only what a benchmark proves is slow (plan §44): the benchmark
-scripts live in `other/tests/lua/scripts/09*-benchmark*.lua` and run through
-the Lua harness — `mta test --preset <preset> lua` prints an ops/s rate for
-every benchmark. A pull request that claims a performance improvement
-records the affected benchmark, the preset it was measured on and the
-before/after numbers in the PR description; optimizations without measured
-numbers are not accepted.
+Optimize only what a benchmark proves is slow. The benchmark scripts live
+in `other/tests/lua/scripts/09*-benchmark*.lua` and run through the Lua
+suite (`mta test lua` prints an ops/s rate for every benchmark). A pull
+request that claims a performance improvement records the affected
+benchmark, the preset it was measured on and the before/after numbers in
+the description; optimizations without measured numbers are not accepted.
+
+## Documentation
+
+- User-facing behavior changes: update the relevant document under
+  `other/documents/` (`example.md` for features, `api.md` for the public
+  surface, `architecture.md` for internals).
+- Every documented command and example must work: run it before committing.
+- Update `CHANGELOG.md` under a new `[Unreleased]` heading.
 
 ## Releases
 
 - Bump the version in `config/module.toml` (`[module] version`) only — the
-  module reports it as the Module version float (plan §38: `source/sdk/abi/
-  module.cpp` compiles it into the binary metadata); the SDK's own version
-  lives separately in `source/sdk/version.hpp` (`SDK_VERSION`/`SDK_ABI_VERSION`).
-  Add a CHANGELOG.md entry.
-- Pushing a tag like v2.0.0 triggers the Release workflow, which builds,
-  tests, runs the (blocking, win-mingw) real-server integration and attaches
-  exactly the module binaries — `<module>.dll` / `<module>.so`, produced by
+  module reports it as the Module version float; the SDK's own version
+  lives separately in `source/sdk/version.hpp`
+  (`SDK_VERSION` / `SDK_ABI_VERSION`). Add a CHANGELOG entry.
+- Pushing a tag like `v2.1.0` triggers the Release workflow: all three
+  platform legs build and run the test suites, the win-mingw leg runs the
+  blocking real-server integration, and the release attaches exactly the
+  module binaries — `<module>.dll` / `<module>.so`, produced by
   `mta package --release-name` — to a GitHub Release (see
-  .github/workflows/release.yml; plan §36: nothing else ships).
+  `.github/workflows/release.yml`). Nothing else ships.

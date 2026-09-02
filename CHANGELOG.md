@@ -4,313 +4,175 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.1.0] — 2026-09-02
 
 ### Added
 
-- SDK version facts (plan §38): `source/sdk/version.hpp` is the single source
-  for `SDK_VERSION` ("1.0.0") and `SDK_ABI_VERSION` ("1"); `mta::SdkInfo` /
-  `mta::sdk_info()` expose them, the load diagnostic logs sdk/abi/module/MTA
-  versions separately, `project(VERSION)` now parses `SDK_VERSION` from the
-  header (the Module version float stays with `config/module.toml`), and
-  `mta doctor` reads the same header (`read_sdk_version_header`) to report
-  `SDK version` / `ABI version` as distinct checks.
-- The borrowed state view (plan §18/§45, the LuaView half of the value model)
-  now covers the full synchronous surface: `mta::state` (alias `mta::LuaView`)
-  gained `arg_count()` and the typed readers `check_number/opt_number`,
-  `check_integer/opt_integer`, `check_boolean/opt_boolean`,
-  `check_string/opt_string` with the same conversions and error messages as
-  the free `mta::lua::check_*` helpers; `top()`, `args<Ts...>()`,
-  `push_results(...)` and `resource_name()` were already there.
-- Benchmark suite for the remaining plan §44 areas (informational, printed
-  rates, sanity-asserted): `092_benchmark_tables.lua` (Table snapshot
-  roundtrip via `bench_table_roundtrip`), `093_benchmark_callback.lua`
-  (callback hold/call/release bookkeeping), `094_benchmark_scheduling.lua`
-  (async task + timer scheduling), `095_benchmark_userdata.lua` (userdata
-  creation/access) — joining `090_benchmark.lua` (function call throughput)
-  and `091_benchmark_arguments.lua` (argument conversion) in the lua suite.
-
-- Native MTA types as typed binder arguments/results (plan §6/§17): a
-  `mta::Resource` parameter is resolved by name and validated live through
-  the module manager on every call (`bind.hpp`), an unknown or already
-  stopped resource raises a readable
-  `bad argument #N to 'name' (no running resource '...')` error, and a
-  returned `Resource` is pushed to Lua as its name (`push_one` ADL hook in
-  `native/resource.hpp`); `std::optional<mta::Resource>` accepts
-  `nil`/absence. Samples `sample_resource_arg`, `sample_resource_arg_optional`,
-  `sample_resource_return` (`source/functions/native/resource_args.cpp`),
-  regression-tested in `060_features.lua`. Player/Element/Vehicle wrappers
-  remain intentionally absent behind the frozen module ABI (documented).
-- Signature metadata completion (plan §9/§10): `Signature` derives capability
-  flags (`variadic`, `callback`) that the registration bridge stores in
-  `Spec::flags`; object methods record `MethodInfo` metadata
-  (name + self-excluded signature) and `MTA_OBJECT` types list themselves in
-  `mta::userdata::object_types()`; `mta docs` (`sdk_docgen`) now renders
-  argument/return details, category (explicit `n/a` until a registration
-  spelling provides one), flags, an explicit errors marker and a new
-  "Object types" section (methods materialized in a scratch VM).
-- Typed `rest_args`/`context` sample functions
-  (`source/functions/basics/typed_params.cpp`: `sample_rest_count`,
-  `sample_context_caller`) with binder tests in `040_binder.lua` (plan §6).
-- `example.md` §9: the canonical `sum` example (`MTA_FUNCTION("sum", ...)`,
-  the `sum(10, 20)` / `sum(10)` / `sum("10", 20)` calls with their results
-  including the conceptual `argument #2 is missing` / `argument #1 has
-  invalid type` conditions mapped to the plan §7 format), the supported
-  parameter/result types, the error-generation mechanism, manual validation
-  and the cases where automatic binding is insufficient (plan §8).
-
-- Definition-of-done sweep (plan §50): the `source/library/` layer now
-  exists with real content — `library/base/handle_map.hpp`
-  (`mta::library::base::HandleMap<Id, Handle>`), the id → handle registry
-  the async-task and timer samples use for their Lua-facing handle
-  bookkeeping (both migrated off hand-rolled `unordered_map` flows); the
-  layer direction (`functions → library → sdk`, never back up) is
-  documented in architecture.md.
-- Release pipeline rework (plan PHASE 14) in `.github/workflows/release.yml`:
-  the matrix now covers `linux-gcc`, `win-mingw` and `win-msvc`; every leg
-  builds, runs the unit + lua suites through the CLI, and packages with
-  `mta package`; the release attaches exactly the module binaries under their
-  §36 names (`<module>.dll` / `<module>.so`, via `mta package --release-name`
-  + printed sha256) — the old CPack ZIP + LICENSE artifacts are gone (plan
-  §36: publish only the module binary). The win-mingw leg additionally runs
-  the real-server integration as a BLOCKING step before package/publish (the
-  harness is Windows-only; §37 "relevant integration tests"). CI (PHASE 13):
-  `mta doctor` job, CLI smoke on Linux (`mta docs`, `mta test unit`,
-  `mta test lua`), a Clang build leg and a real-server integration canary job.
-- Documentation rewrite (plan PHASE 12) in `other/documents/`: `example.md`
-  (a complete feature walkthrough — sync function, async task, timer,
-  object, per-resource state, events, resources — mapped to the bundled
-  samples and tests), `api.md` (the full V2 public surface: registration
-  macros, typed arguments/results, errors, snapshots, stack helpers,
-  logging, tasks, callbacks, timers, per-resource state, objects, events,
-  native types, module identity, `config/module.toml` and the `mta` CLI),
-  `architecture.md` (layers, key flows incl. restart generations, threading
-  rules, configuration, the three test layers incl. the real-server
-  harness, conventions) and `migration-v1-to-v2.md` (layout/config/API
-  changes, semantics to audit, a step-by-step checklist). The legacy
-  `API.md`/`ARCHITECTURE.md` were superseded by the lowercase set (git
-  history keeps the old long-form); `GUIDES.md`/`TUTORIAL.md` stay as
-  supplements with pointers to the new set.
-- Server integration harness (plan §30-§33, PHASE 11) in `other/server/mta_server.py`
-  (stdlib Python): identity-pinned MTA server install (`install`/`update`/
-  `version`/`start`/`stop`) into an isolated directory under `other/server/`
-  — the installer payload is extracted directly (a registered MTA:SA
-  installation on the machine would otherwise silently redirect the
-  install), with the pinned build identity and sha256 recorded in
-  `install.json`; the extraction tool (7-Zip) is bootstrapped locally via an
-  `msiexec /a` administrative image, so nothing requires elevation.
-- `mta server test` / `mta test integration`: end-to-end run on the REAL
-  pinned x64 server — builds the module, prepares a throwaway server tree
-  with unique ports per run, loads the module (`<module src=...>` from
-  `x64/modules`), and drives the `sdkintegration` resource through the §32
-  scenarios (module load, registration, return values, argument validation,
-  userdata + validation, MTA timers, async tasks, callbacks) and the §33
-  restart scenario (the harness restarts the resource mid-run; the
-  generation-1 stale task must never deliver into generation 2), then stops
-  the server gracefully with a 60-second task still queued (§32 shutdown)
-  and asserts it never fires.
-- Console driving: the Windows server requires a real console for output and
-  input, so the harness shares its console (CONIN$/CONOUT$ handles), types
-  `restart`/`exit` as key events, consumes the console scrollback as the run
-  log and keeps it under `other/server/logs/`.
-- `mta` project CLI (plan §24-§29, PHASE 10) in `other/tools/mta/`
-  (stdlib Python + launchers): `init` (full project scaffold, non-destructive
-  guards, identity rewritten from the name), `new function`/`new object`
-  (compile-ready skeletons, registered names verbatim — `crypto.sha256`
-  stays `crypto.sha256`), `build` (CMake presets, platform default), `test
-  [all|unit|lua|integration]` (separated suites), `docs` (markdown from the
-  PHASE 4 registry metadata via a new `sdk_docgen` target), `doctor` (real
-  environment checks: TOML validity, toolchain/cmake/ninja/compiler
-  versions, C++ standard, presets, source discovery, build output, git
-  state, server env, Lua headers byte-compared against the bundled Lua),
-  `package` (dist/ + sha256), `server` (delegates to other/server, lands
-  in PHASE 11).
-- Native types, safe subset (plan §17/PHASE 9): `mta::Resource` — live,
-  ABI-backed resource lookup (`find(name)`, `current(L)`, `vm()` re-looked
-  up on every call so a stopped resource can never hand out a dangling
-  lua_State, `alive()`); samples `sample_resource_name`/`sample_resource_find`
-  and tests. Player/Vehicle/Element wrappers are intentionally absent: the
-  frozen module ABI exposes no element API, so they cannot be represented
-  safely (documented in the header).
-- Userdata V2 (plan §16): `MTA_OBJECT("counter", Counter)` declares a
-  stable, deterministic, compiler-independent type identity; the metatable
-  name is module-aware (`mta.<module>.<type>`) so two modules cannot
-  collide, argument errors name the declared type, and a type without an
-  explicit name falls back to a compiler-dependent identity with a warning.
-- `[features]` consumption (plan §4): subsystem switches compile in as
-  `SDK_FEATURE_*` definitions and exclude the bundled sample functions of a
-  disabled subsystem from the module and the test binary; explicit cache
-  overrides win (`-DSDK_FEATURE_ASYNC=OFF`, `-DSDK_ASYNC_WORKERS=4`,
-  `-DSDK_ASYNC_QUEUE=1024`).
-- Timer V2 (plan §15): `mta::timer::after(L, delay, fn)` (one-shot) and
-  `mta::timer::every(L, delay, fn)` (repeating) return a `Timer` handle
-  (`cancel()/valid()/id()`); timers are resource-aware — a resource stop
-  invalidates every owned timer and stale-generation timers can never fire
-  into a restarted VM.
-- Samples `sample_after`/`sample_every`/`sample_after_cancel`/
-  `sample_timer_valid` (per-resource timer registry) and Lua test
-  `038_timer.lua`.
-- Async V2 task API (plan §13/§14): `mta::async::run(L, work, completion)`
-  returns a cancellable `Task` handle (`cancel()/done()/valid()/id()`);
-  cooperative cancellation suppresses the completion; the task is owned by
-  the calling resource — a stop cancels queued tasks and drops completions
-  of the finished generation before any Lua access.
-- Queue limits and worker count from `config/module.toml` `[async]`
-  (`queue = 4096`, `workers = "auto"` compiled into the module): a full
-  queue rejects the task with an invalid handle instead of blocking.
-- Samples `sample_task_run`/`sample_task_cancel` (per-resource task
-  registry) and Lua test `035_task.lua`; C++ harness regressions for the
-  handle semantics, ownership and the queue limit.
-- ResourceContext generations (plan §11/§33, P0): every resource stop ends
-  the VM generation (`Hub::generation`/`bump_generation`). Callbacks, async
-  task completions and timers record the generation they were created in and
-  are structurally unable to operate across a restart of their resource --
-  even when the fresh registry hands out the same `luaL_ref` index.
-- Harness restart simulation (plan §33): `test_resource_restart()` swaps in
-  a REAL fresh Lua VM (fresh registry) under a new generation;
-  `test_fresh_vm_dostring`/`test_fresh_vm_get` drive and observe it; a new
-  regression script `072_restart.lua` reproduces the audited §5.1
-  generation-confusion bug without the fix and passes with it (verified).
-- `mta::log::debug(...)` overload for messages outside a VM context.
+- `mta new function` / `mta new object` verified end to end: both templates
+  compile out of the box in a fresh `mta init` project and are picked up by
+  automatic source discovery.
+- `mta doctor` status model: every check reports PASS/WARN/FAIL/SKIP, Lua
+  ABI comparison is reported as SKIPPED (with a reason) when the vendored
+  header directories are absent, and failures carry a fix hint.
+- Benchmark suite for the remaining runtime areas (informational, printed
+  rates, sanity-asserted): table snapshot roundtrips, callback
+  hold/call/release bookkeeping, async task + timer scheduling, userdata
+  creation/access — joining the function-call and argument-conversion
+  benchmarks in the Lua suite.
 
 ### Changed
 
-- Timer scheduling internals: `Scheduler::post_timer_impl` creates shared
-  `mta::timer::TimerState` for every timer; all scheduler-side drops
-  (cancel, resource stop, stale generation, repeat limit) mark the state
-  finished so public handles report `valid() == false`.
-- `Scheduler::post_task` returns a `Task` handle and takes optional
-  (resource, generation) ownership; `sample_async_add` migrated to
-  `mta::async::run` and reports queue-full rejections.
-- `Callback` identity is now (resource, generation, ref): stale callbacks
-  are dropped with a debug log, and releasing a stale callback never
-  untracks the live callback that reused its index.
-- Timers store the owner's generation; the pump drops timers of a stale
-  generation; `handle_resource_stopped` still cancels them immediately.
-- `release_all_callbacks` unrefs only live references of the current
-  generation.
-
-### Added
-
-- Unified error model `sdk/errors/errors.hpp` (plan §19): `mta::errors::Error`
-  with categories (Generic, InvalidArgument, InvalidType, MissingArgument,
-  ResourceStopped, InvalidCallback, InvalidObject, AsyncCancelled,
-  InternalError). Internal failures render as `internal module error: ...` —
-  framework bugs can never masquerade as scripter mistakes.
-- Signature metadata (plan §9/§21): the registry stores derived
-  argument/return/variadic info per function (`Spec::signature`, derived for
-  lambda-style, explicitly not derived for body-style); new built-in
-  `module_signature(name)` exposes it; `module_functions` unchanged.
-- Argument errors carry the function name and position (plan §7):
-  `bad argument #2 to 'sample_minmax' (expected number, got no value)` /
-  `bad argument #1 to 'sample_greet' (expected string, got table)` /
-  `bad argument #1 to 'sample_range' (expected integer, got string)`.
-- New sample `sample_hello_len` (tuple-returning lambda; exercises metadata).
-- `other/tests/lua/scripts/045_errors.lua` — the plan §7 error matrix and
-  `module_signature` metadata checks.
-
-### Changed
-
-- Binder error rendering moved to the plan §7 format; the running function's
-  registered name is set by every registration trampoline (body style, lambda
-  style, userdata methods) and used in messages. Old texts
-  (`argument #N must be a ...`) replaced everywhere, including all pinned Lua
-  test assertions.
-- The protected_call boundary re-renders unexpected std exceptions as
-  internal errors; deliberate `raise_error` messages stay verbatim.
-
-### Added
-
-- Public facade `<mta/sdk.hpp>` (plan §42/§43): the single developer-facing
-  include exporting the registration macros, `mta::lua` values/stack helpers,
-  async (Callback/Scheduler), per-resource state, logging, events and
-  userdata. All sample functions now include only the facade.
-- `MTA_FUNCTION(name, function)` / `MTA_FUNCTION(name, "description",
-  function)` — the plan §6 registration spelling; the function is registered
-  under exactly the given name (no prefixes/namespaces, plan §2).
-
-### Added
-
-- `config/module.toml` — the single project configuration file (plan §4/§5):
-  module identity (`[module]` name/title/author/version), build options
-  (`[build]` cxx_standard/unity/lto) and forward-looking `[async]` /
-  `[features]` sections. CMake parses the TOML directly before `project()`
-  (`cmake/core/module-config.cmake`); `project(VERSION)` follows
-  `SDK_VERSION` in `source/sdk/version.hpp`, keeping the SDK version separate
-  from the Module version (plan §38). Explicit `-D` cache entries keep
-  working as overrides.
-- CTest tests for the TOML reader (`module_config_parse`,
-  `module_config_rejects_garbage`).
-
-### Changed
-
-- Module identity is no longer defined by CMake cache defaults: the cache
-  variables `SDK_MODULE_NAME/TITLE/AUTHOR` are now optional overrides of
-  `config/module.toml` values. A previously configured build directory
-  caches its old values — run `cmake -U "SDK_MODULE_*" ...` once (or
-  configure a fresh directory) to re-read the TOML.
-- `SDK_UNITY` / `SDK_LTO` defaults come from `config/module.toml` `[build]`
-  (removed from the presets so the TOML stays the single source).
-- Module version bumped to 2.0.0 (V2 line).
-
-### Added
-
-- Configurable module identity: `SDK_MODULE_NAME` (default `base` →
-  `base.dll` / `base.so`), `SDK_MODULE_TITLE` and `SDK_MODULE_AUTHOR` are
-  plain CMake cache variables — renaming the module no longer requires
-  editing C++ sources. The Windows export table follows the name via a
-  generated module.def (template: src/module/module.def.in).
-- docs/ARCHITECTURE.md: a full architecture document (layers, flows,
-  threading rules, configuration) for understanding the system at a glance.
-
-### Changed
-
-- The module export files were renamed to be name-neutral
-  (src/module/module.def.in, src/module/module.ver).
-- The CMake project was renamed from ml_base to mta_sdk_module (the output
-  binary name is controlled by SDK_MODULE_NAME, not the project name).
+- Canonical repository layout finalized: the CMake implementation moved
+  from `cmake/` to `config/cmake/` (core, lua, platform, install), so the
+  root contains only project entry points and `config/module.toml` stays
+  the single configuration file.
+- Module version bumped to 2.1.0.
+- README rewritten as a product introduction (quick start, first function,
+  build/test/install, project structure, platforms); deep technical content
+  stays in `other/documents/`.
+- Development-planning artifacts removed from the repository; every kept
+  source file, document and test now stands on its own without referencing
+  the implementation process.
 
 ### Fixed
 
 - CI: the real-server integration job invoked the Python CLI under
-  `shell: msys2 {0}`, where no Python exists (exit 127, "python: command
-  not found" — the job had been failing since the MSYS2 job rework). The
-  steps now run under pwsh with `C:\msys64\ucrt64\bin` on PATH, matching
-  the release workflow.
-- CI / MSVC: `sdk_tests` died with fail-fast `0xc0000409` on the
-  windows-latest runner (MSVC 14.51): the `protected_call` /
-  `protected_call_named` trampolines were `noexcept` while their catch
-  blocks end in `luaL_error`, which longjmps to the Lua pcall protection
-  point — a longjmp out of a `noexcept` function is a fail-fast on MSVC
-  (GCC tolerates it, which is why win-mingw/linux stayed green). The
-  `noexcept` is removed from the boundary (with an explanatory comment)
-  and the harness now prints unbuffered progress so a crash point is
-  always visible in CI logs.
-- Module-facing Lua headers (vendor/mta-sdk/lua) now match the vendored MTA
-  Lua 5.1 exactly: the stock declarations of `luaL_newstate`/`luaL_newstate`
-  hid the server's extra `mtasaowner` argument, so a module-created Lua state
-  was built with an undefined owner pointer. The test harness now passes
-  `nullptr` explicitly, and CI verifies the header sets cannot drift again.
-- Export hygiene: ml_base exported the whole statically linked Lua API
-  (157 symbols) because LUA_BUILD_AS_DLL was defined while building the Lua
-  sources even though Lua is linked statically into the module. The module
-  now exports only its six MTA entry points — ml_base.def on Windows and a
-  version script on Linux pin the exact list.
-- Comment encoding: non-ASCII dashes in sources, tests and .clang-format are
-  gone, so every text file is clean ASCII/UTF-8 on any toolchain, including
-  MSVC builds without /utf-8.
+  `shell: msys2 {0}`, where no Python exists (exit 127). The steps now run
+  under pwsh with the MinGW toolchain on PATH, matching the release
+  workflow.
+- CI / MSVC: `sdk_tests` died with fail-fast `0xc0000409` on recent MSVC
+  runners: the Lua trampoline boundary (`protected_call` /
+  `protected_call_named`) was `noexcept` while its catch blocks end in
+  `luaL_error`, which longjmps to the Lua pcall protection point — a
+  longjmp out of a `noexcept` function is a fail-fast on MSVC. The
+  `noexcept` is removed from the boundary and the harness prints
+  unbuffered progress so a crash point is always visible in CI logs.
 
-### Changed
-
-- The module version is derived from the single `project()` version in
-  CMakeLists.txt instead of being hard-coded in src/module/module.cpp.
-- The win-mingw preset now enables unity builds and LTO like the other
-  presets (verified against the same MinGW-w64 toolchain).
+## [2.0.0] — 2026-09-02
 
 ### Added
 
-- CI check that vendor/mta-sdk/lua/*.h stay byte-identical to the compiled
-  vendor/lua/src/*.h headers (guards the module/server Lua ABI).
+- Public facade `<mta/sdk.hpp>`: the single developer-facing include
+  exporting the registration macros, the `mta::lua` value/stack layer,
+  async, per-resource state, logging, events and userdata.
+- Registration macros: `MTA_FUNCTION(name, function)` /
+  `MTA_FUNCTION(name, "description", function)` (lambda style, registered
+  under exactly the given name — no prefixes or namespaces),
+  `MTA_LUA_FUNCTION` (body style) and `MTA_LUA_FUNC` (lambda one-liners).
+- Typed binder: arguments are read and validated from the C++ signature;
+  supported parameters include scalars, `std::string`, `std::optional<T>`,
+  `mta::lua::rest_args`, a call `context`, `mta::lua::Table` snapshots and
+  the native `mta::Resource`. Errors render as
+  `bad argument #N to 'name' (expected X, got Y)`.
+- Unified error model (`sdk/errors/errors.hpp`): `mta::errors::Error` with
+  categories; internal failures render as `internal module error: ...` so
+  framework bugs can never masquerade as scripter mistakes.
+- Async task API: `mta::async::run(L, work, completion)` returns a
+  cancellable `Task` handle; cooperative cancellation suppresses the
+  completion; tasks are owned by the calling resource — a stop cancels
+  queued tasks and drops completions of the finished generation before any
+  Lua access. Worker count and queue limit come from `config/module.toml`.
+- Timer API: `mta::timer::after` / `mta::timer::every` with `Timer` handles
+  (`cancel()/valid()/id()`); timers are resource-aware and
+  stale-generation timers can never fire into a restarted VM.
+- Resource generations: every resource stop ends the VM generation;
+  callbacks, task completions and timers record the generation they were
+  created in and are structurally unable to operate across a restart of
+  their resource — even when the fresh registry hands out the same
+  `luaL_ref` index. Regression-tested in `072_restart.lua` and by the
+  real-server restart choreography.
+- Userdata objects: `MTA_OBJECT("counter", Counter)` declares a stable,
+  compiler-independent type identity with a module-aware metatable name
+  (`mta.<module>.<type>`); `MTA_METHOD` registers methods with
+  self-excluded signature metadata.
+- Native MTA types (safe subset): `mta::Resource` — live, ABI-backed
+  resource lookup validated on every call; usable directly as a typed
+  binder parameter/result. Element/player wrappers stay intentionally
+  absent behind the frozen module ABI.
+- Signature metadata: derived argument/return/variadic info per function
+  plus object method metadata; exposed through the built-in
+  `module_signature(name)` and rendered by `mta docs`.
+- Borrowed state view: `mta::state` / `MTA_STATE` with typed readers
+  (`check_number/opt_number`, `check_integer`, `check_boolean`,
+  `check_string` + optional variants) mirroring the free `mta::lua::check_*`
+  helpers; `mta::LuaView` is an alias.
+- `source/library/base/handle_map.hpp` — the reusable id → handle map the
+  async-task and timer samples use for Lua-facing handle bookkeeping.
+- `config/module.toml` — the single project configuration file: module
+  identity, build options (`cxx_standard`/`unity`/`lto`), `[async]` runtime
+  knobs and `[features]` subsystem switches (disabled subsystems exclude
+  their bundled samples from the build). CMake parses the TOML before
+  `project()`; `project(VERSION)` follows `SDK_VERSION` in
+  `source/sdk/version.hpp`, keeping the SDK version separate from the
+  Module version. `-D` cache entries still work as overrides.
+- `mta` project CLI (`other/tools/mta/`, stdlib Python): `init` (full
+  project scaffold with identity rewrite), `new function`/`new object`
+  (compile-ready skeletons, registered names verbatim), `build` (CMake
+  presets, platform default), `test [all|unit|lua|integration]`, `docs`
+  (markdown from registry metadata via the `sdk_docgen` target), `doctor`
+  (TOML validity, SDK/ABI versions, Lua ABI byte-compare, toolchain,
+  architecture, presets, source discovery, build output, git state, server
+  environment), `package` (dist/ + sha256) and `server` (pinned-server
+  management).
+- Real-server integration harness (`other/server/mta_server.py`, stdlib
+  Python): identity-pinned MTA server install into an isolated directory
+  with the build identity recorded in `install.json`, direct installer
+  payload extraction (7-Zip bootstrapped via an `msiexec /a` administrative
+  image, nothing requires elevation), end-to-end runs that build the
+  module, prepare a throwaway server tree, drive the integration resource
+  through function/argument/return/table/callback/timer/async/userdata
+  scenarios plus the restart choreography across resource generations, and
+  stop the server gracefully with a pending long task that must never fire.
+  Console output is captured into `other/server/logs/`.
+- CI: Linux GCC + Clang, Windows MinGW-w64 + MSVC, `mta doctor`, CLI smoke,
+  a Lua-ABI byte-identity check and a blocking real-server integration job.
+- Release workflow: tag-triggered builds for linux-gcc, win-mingw and
+  win-msvc; the win-mingw leg runs the real-server integration before
+  packaging; releases attach exactly `<module>.dll` / `<module>.so` with a
+  printed sha256.
+- Documentation set in `other/documents/`: `example.md` (complete feature
+  walkthrough with expected results), `api.md` (full public surface),
+  `architecture.md` (layers, value model, lifetimes, threading, build and
+  test system), `TUTORIAL.md`, `GUIDES.md` and `migration-v1-to-v2.md`.
+- Benchmark scripts (informational rates, sanity-asserted) for function
+  call throughput and argument conversion.
+
+### Changed
+
+- Binder error rendering uses the unified
+  `bad argument #N to 'name' (expected X, got Y)` format; the running
+  function's registered name is set by every registration trampoline.
+- Timer scheduling internals: every timer shares a `TimerState`, so all
+  drops (cancel, resource stop, stale generation, repeat limit) mark the
+  state finished and public handles report `valid() == false`.
+- `Scheduler::post_task` returns a `Task` handle and takes optional
+  (resource, generation) ownership; `Callback` identity is now
+  (resource, generation, ref) and releasing a stale callback never untracks
+  the live callback that reused its index.
+- The win-mingw preset enables unity builds and LTO like the other presets.
+
+### Fixed
+
+- Module-facing Lua headers now match the vendored MTA Lua 5.1 exactly: the
+  stock `luaL_newstate` declaration hid the server's extra `mtasaowner`
+  argument, so a module-created Lua state was built with an undefined owner
+  pointer. The test harness passes `nullptr` explicitly and CI verifies the
+  header sets cannot drift again.
+- Export hygiene: the module exported the whole statically linked Lua API
+  because `LUA_BUILD_AS_DLL` was defined while building the Lua sources.
+  The module now exports only its six MTA entry points — a generated
+  `.def` on Windows and a version script on Linux pin the exact list.
+- Callback reference tracking: registry indices are only unique per VM, so
+  equal ref numbers from different resources could collide. References are
+  keyed by (resource, ref, generation).
+- `Scheduler::pump()` could invalidate its timer iterator when a timer
+  callback created or cancelled timers; due timers are dispatched from a
+  snapshot.
+- `sample_range`: the size guard could overflow for extreme int64 bounds;
+  the comparison uses unsigned arithmetic.
+- `Callback::call` grows the Lua stack explicitly before pushing arguments.
+- Comment encoding: every text file is clean ASCII/UTF-8 on any toolchain,
+  including MSVC builds without `/utf-8`.
 
 ## [1.1.0] — 2026-08-30
 
@@ -318,29 +180,26 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Callback reference tracking: registry indices are only unique per VM, so
   equal ref numbers from different resources could collide in the global
-  tracking map. References are now keyed by (resource, ref), preventing
-  cross-resource luaL_unref and stale-entry overlap.
-- Scheduler::pump() could invalidate its timer iterator: a timer callback that
-  created (post_timer) or cancelled (cancel_timer) timers while the loop ran
-  could trigger undefined behavior. Due timers are now dispatched from a
-  snapshot, so callbacks may safely mutate the timer list.
+  tracking map. References are now keyed by (resource, ref).
+- `Scheduler::pump()` could invalidate its timer iterator: a timer callback
+  that created or cancelled timers while the loop ran could trigger
+  undefined behavior. Due timers are dispatched from a snapshot.
 - sample_range: the size guard could overflow for extreme int64 bounds; the
   comparison now uses unsigned arithmetic.
-- Callback::call: the Lua stack is now grown explicitly before pushing
+- Callback::call: the Lua stack is grown explicitly before pushing
   arguments, avoiding a hard stack overflow for large argument lists.
 
 ### Changed
 
-- All code comments, user-facing messages and documentation are now in
-  English (README, API.md, GUIDES.md, TUTORIAL.md, CHANGELOG).
+- All code comments, user-facing messages and documentation are in English.
 - Module version bumped to 1.1.0.
 
 ### Added
 
 - CI job for MSVC (win-msvc preset) on GitHub Actions.
-- Release workflow: pushing a v* tag builds Windows and Linux artifacts
-  (ml_base.dll / ml_base.so) and attaches them to a GitHub Release.
-- Install rules and CPack ZIP packaging (cmake/install.cmake).
+- Release workflow: pushing a v* tag builds Windows and Linux artifacts and
+  attaches them to a GitHub Release.
+- Install rules and CPack ZIP packaging.
 
 ## [1.0.0] — 2026-08-30
 
@@ -352,11 +211,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   style), argument reading via mta::lua::args<...>.
 - Table support (Argument/Table), std::optional, C++ defaults, rest_args,
   context.
-- Async scheduler (workers + DoPulse), timers, stable Lua callbacks
-  (mta::async::Callback).
-- Per-resource state (mta::resources::Store) with automatic cleanup.
-- Logging (mta::log).
-- Embedded-Lua test harness (sdk_tests) with a mock manager.
+- Async scheduler (workers + DoPulse), timers, stable Lua callbacks.
+- Per-resource state with automatic cleanup.
+- Logging.
+- Embedded-Lua test harness with a mock manager.
 - Builds for Windows (MinGW/MSVC) and Linux (GCC) via CMake presets.
-- Documentation: README.md, docs/API.md, docs/GUIDES.md.
-- CI (GitHub Actions), .clang-format, .editorconfig, sanitizer option.
+- CI, .clang-format, .editorconfig, sanitizer option.

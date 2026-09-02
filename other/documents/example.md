@@ -324,7 +324,7 @@ end)
 mta doctor                 -- environment ready?
 mta build                  -- configure + build (default preset)
 mta test all               -- unit (C++) + lua (embedded VM) suites
-mta test integration       -- real pinned MTA server run (PHASE 11 harness)
+mta test integration       -- real pinned MTA server run (harness in other/server/)
 mta package                -- dist/greeter-0.1.0-<platform>/ + sha256
 mta server install         -- isolated pinned server (first time only)
 mta server test            -- the same integration through the harness
@@ -374,7 +374,7 @@ sum(10)            -- the second argument is absent
 ```
 
 The conceptual result of this call is: **argument #2 is missing**. The SDK
-renders the same condition in its own diagnostic format (plan §7):
+renders the same condition in its own diagnostic format:
 
 ```text
 bad argument #2 to 'sum' (expected number, got no value)
@@ -412,7 +412,7 @@ types:
 | `mta::lua::Table` / `Argument` / `rest_args` | table / any value / the tail |
 | `mta::async::Callback` | function (stable reference) |
 | `mta::lua::context` | — (consumes no Lua argument) |
-| `mta::Resource` | name of a running resource, validated live (plan §17) |
+| `mta::Resource` | name of a running resource, validated live |
 
 Result types: scalars, `std::optional<T>` (`nil` when absent), tuple/pair and
 `std::vector<T>` (expanded into several results), `mta::lua::Arguments`,
@@ -427,7 +427,7 @@ first). Argument problems are raised by the typed readers as categorized
 errors (`InvalidType`, `MissingArgument`, `InvalidObject`, …) and rendered as
 `bad argument #N to 'name' (…)`; anything categorized `InternalError` is
 rendered as `internal module error: …`, so a scripter mistake can never
-masquerade as a framework bug (plan §19). The same model covers object
+masquerade as a framework bug. The same model covers object
 validation (`expected counter, got table`) and native entities
 (`no running resource 'xyz'`).
 
@@ -475,7 +475,7 @@ MTA_LUA_FUNCTION("clamp", "Clamps value into [lo, hi].")
 * You need raw stack access or a custom calling convention — body style with
   `check_*`/`opt_*` (api.md, "Direct stack access").
 * Body-style registration cannot derive signature metadata: `module_signature`
-  reports `derived == false` and `mta docs` says so explicitly (plan §9/§10).
+  reports `derived == false` and `mta docs` says so explicitly.
 * Per-function error declarations are not part of the metadata (the binder
   converts raised errors uniformly); document special errors in the
   description.
@@ -801,14 +801,13 @@ Status: NOT READY
 
 ---
 
-## Coverage map: the §39 topic checklist
+## Coverage map: feature topic index
 
-Task_21 (PROMT.md §39) names ~21 topics for `example.md`. This document
-keeps its walkthrough order instead of one section per topic; every topic
-is still demonstrated in full — here is where each one lives, in this
-document or in the bundled file that exercises it:
+This document keeps its walkthrough order instead of one section per
+topic; every important feature is demonstrated in full — here is where
+each one lives, in this document or in the bundled file that exercises it:
 
-| §39 topic | In this document | Bundled code / command |
+| Topic | In this document | Bundled code / command |
 |---|---|---|
 | Basic function | §2, §9 | `source/functions/basics/greet.cpp`, `hello.cpp` (`sample_greet`, `sample_hello`) |
 | Multiple arguments | §2, §10 | `basics/minmax.cpp` (`sample_minmax`), `async/task_demo.cpp` (`sample_task_run`) |

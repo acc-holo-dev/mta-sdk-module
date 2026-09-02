@@ -588,7 +588,7 @@ duplicated as literals anywhere else:
 | Version | Source | Surfaces |
 |---|---|---|
 | SDK version | `SDK_VERSION "1.0.0"` in `source/sdk/version.hpp` | `mta::sdk_info().version`; CMake `project(VERSION)`; `mta doctor` |
-| Module version | `config/module.toml` `[module] version` → CMake `SDK_MODULE_VERSION` float (`"2.0.0"` → `2.0`) | binary metadata / `InitModule`, `module_info().version`, packaging |
+| Module version | `config/module.toml` `[module] version` → CMake `SDK_MODULE_VERSION` float (`"2.1.0"` → `2.1`) | binary metadata / `InitModule`, `module_info().version`, packaging |
 | ABI version | `SDK_ABI_VERSION "1"` in `source/sdk/version.hpp` | `mta::sdk_info().abi_version` — the six `MTAEXPORT` entry points + `ILuaModuleManager10` contract |
 | MTA server version | runtime fact from the module manager (`GetVersionString()`) | `mta::server_info()` (with netcode version and OS) |
 
@@ -603,7 +603,7 @@ if (auto server = mta::server_info())      // runtime: nullopt without a module 
   the module's; `cmake/install.cmake` names the package ZIP with the
   **Module** version, because the ZIP is a module artifact.
 * The load diagnostic reports them separately:
-  `module: loaded base (module 2.0, sdk 1.0.0, abi 1; MTA <server version>)`.
+  `module: loaded base (module 2.1, sdk 1.0.0, abi 1; MTA <server version>)`.
 * `mta doctor` parses the same header (`read_sdk_version_header` in
   `other/tools/mta/cli.py`) and prints `SDK version: sdk 1.0.0` and
   `ABI version: module-abi 1` as two separate checks, next to the Project
@@ -632,7 +632,7 @@ The single source of truth — read by CMake and the CLI:
 name = "base"          # binary + registration name (base.dll / base.so)
 title = "Base Module"  # human-readable title
 author = "Developer"
-version = "2.0.0"      # semver; flows into metadata and packaging
+version = "2.1.0"      # semver; flows into metadata and packaging
 
 [build]
 cxx_standard = 20      # 20

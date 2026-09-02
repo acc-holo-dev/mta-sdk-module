@@ -1,116 +1,168 @@
-# MTA:SA Lua Module — SDK
+# MTA:SA Module SDK
 
 [![CI](https://github.com/acc-holo-dev/mta-sdk-module/actions/workflows/ci.yml/badge.svg)](https://github.com/acc-holo-dev/mta-sdk-module/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A solid foundation for [MTA:SA](https://multitheftauto.com) server modules:
-a dynamic library (base.dll / base.so by default) that the MTA server loads
-and that adds native Lua functions of its own. The binary name is
-configurable in one file — `config/module.toml`
-(see [Module identity](#configuration-configmoduletoml)).
+A C++20 SDK for writing native MTA:SA server modules: register typed Lua
+functions with one macro, let the binder validate arguments and translate
+errors, and get async work, timers, callbacks and userdata objects with
+resource-safe lifetimes — without touching the raw Lua stack.
 
-Functions are written in **plain C++ with a body**; arguments are read by
-type automatically — no manual check_number, no indices, no "this is a
-number, this is a string":
+## What it is
+
+MTA:SA loads native modules (`.dll` / `.so`) through a fixed six-function C
+ABI. This SDK wraps that ABI in a modern C++ layer so you write ordinary C++
+functions that become ordinary Lua-callable functions:
 
 ```cpp
-// source/functions/basics/my_sum.cpp
 #include <mta/sdk.hpp>
 
-MTA_FUNCTION("my_sum", "Adds two numbers.",
-    [](double a, double b)
+MTA_FUNCTION("greet", "Greets a player by name.",
+    [](std::string name)
     {
-        return a + b;   // checks and the return are automatic
+        return "Hello, " + name + "!";
     });
 ```
 
-`<mta/sdk.hpp>` is the only header a module developer needs (the public
-facade; everything under `source/sdk/` is internal). `MTA_FUNCTION` registers
-the function under **exactly** the name you give — the SDK never adds
-prefixes or namespaces. Rebuild and `my_sum` is available in every server
-resource; new .cpp files are picked up automatically.
-
----
-
-## Table of contents
-
-- [Architecture](#architecture)
-- [Module identity](#configuration-configmoduletoml)
-- [Building](#building)
-- [Server installation](#server-installation)
-- [Writing functions](#writing-functions)
-- [Argument and result types](#argument-and-result-types)
-- [Safety rules](#safety-rules)
-- [Testing](#testing)
-
-> For the full design — layers, data flows, threading rules — see
-> [other/documents/architecture.md](other/documents/architecture.md).
-
-## Architecture
-
-```
-config/
-└── module.toml    # single project configuration (identity, build, async)
-
-source/
-├── functions/    👉 THE ONLY folder you touch
-│   ├── basics/   # sample_add, sample_hello*, sample_greet, sample_tag,
-│   │            #   sample_echo, sample_minmax, sample_range,
-│   │            #   sample_rest_count, sample_context_caller
-│   ├── tables/   # sample_table_stats, sample_table_get/sample_table_set
-│   ├── info/     # sample_version, module_functions, sample_resource_name/find
-│   ├── async/    # sample_async_add, sample_task_*, sample_timer(+cancel),
-│   │            #   sample_after/sample_every (handles)
-│   ├── events/   # sample_trigger_event
-│   ├── objects/  # counter_create — userdata methods example
-│   ├── native/   # sample_resource_arg* — mta::Resource as argument/result
-│   ├── state/    # sample_session_hit, sample_state (the state view)
-│   ├── raw/      # sample_stack_dump — direct stack access
-│   └── bench/    # benchmark plaques (measured by the 09x lua scripts)
-├── library/      # reusable C++ helpers (no Lua registration)
-└── sdk/          # framework internals (module/lua/registry/runtime)
-    ├── abi/      #   MTA contract: six entry points, export tables
-    ├── lua/      #   Lua stack helpers: mta::lua
-    │   ├── bind.hpp is at sdk/bind/  👉 binder: args<...>, pull/push
-    │   ├── argument.hpp  #   Argument: one Lua value + tables (snapshot)
-    │   ├── arguments.hpp  #   Arguments: a list of values (snapshot)
-    │   ├── state.hpp     #   mta::state / MTA_STATE: the borrowed state view
-    │   └── protect.hpp   #   exceptions -> Lua errors
-    ├── errors/   #   unified error model (categories, plan §19)
-    ├── registry/ #   registry + MTA_LUA_FUNCTION / MTA_LUA_FUNC macros
-    ├── runtime/  #   scheduler, callback, timers, tasks
-    ├── resources/#   per-resource state hub/store
-    ├── native/   #   mta::module_info / mta::server_info / mta::Resource
-    ├── objects/  #   userdata metatables
-    ├── events/   #   module -> Lua events
-    └── logging/  #   mta::log
-
-other/
-├── tests/        # lua/ (embedded harness + scripts), unit/, integration/
-├── server/       # real-MTA-server test infrastructure
-├── documents/    # api.md, architecture.md, example.md, GUIDES.md, TUTORIAL.md
-├── tools/        # developer CLI (mta)
-└── third_party/  # mta-sdk (SDK headers) + lua (Lua 5.1.5)
-cmake/            # build infrastructure
+```lua
+local message = greet("world")     -- "Hello, world!"
+local ok, err = pcall(greet, 42)
+-- err == "bad argument #1 to 'greet' (expected string, got number)"
 ```
 
-Put your own functions into domain folders inside functions/ — for example
-functions/crypto/ or functions/http/. A domain is created by simply adding a
-folder with a .cpp: the whole source/**/*.cpp tree is built automatically.
+## What it gives you
 
-## Configuration (config/module.toml)
+- **Typed registration macros** — `MTA_FUNCTION`, `MTA_LUA_FUNCTION` (body
+  style), `MTA_LUA_FUNC` (lambda style); the binder derives argument
+  validation, result conversion and error messages from the C++ signature.
+- **Clear errors** — every mismatch becomes a Lua error in the documented
+  `bad argument #N to 'name' (expected X, got Y)` format; no C++ knowledge
+  required to diagnose.
+- **Value model with an async rule** — owned snapshots
+  (`mta::lua::Argument/Table/Arguments`) are the only values that cross the
+  async boundary; the borrowed view (`mta::state`, `MTA_STATE`) reads and
+  pushes inside the synchronous call.
+- **Async runtime** — `mta::async::run` worker tasks with cancellation and
+  completion delivery on the main thread; `mta::timer::after` /
+  `mta::timer::every` timers; worker count and queue limit from the config.
+- **Native objects** — `MTA_OBJECT` + `MTA_METHOD` register userdata types
+  with stable metatable identities and compiler-independent metadata.
+- **Resource-safe lifetimes** — every callback, task and timer is owned by
+  `(resource, generation)`; a restarted resource can never observe objects
+  from its previous VM.
+- **Logging with context** — `mta::log` prefixes messages with the module
+  name and the current call site automatically.
+- **Tooling** — the `mta` CLI (init, new, build, test, docs, doctor,
+  package, server), a generated-function docs reference (`mta docs`), an
+  embedded Lua test harness, and a pinned real-server integration runner.
 
-The project is configured in **one file** — `config/module.toml`. CMake reads
-it directly (before `project()`), so the identity and build options defined
-there flow into the binary, the MTA registration, packaging and diagnostics:
+## Quick start
+
+Requirements: CMake 3.27+, Ninja (or any CMake generator), a supported
+compiler (see [Supported platforms](#supported-platforms)), and Python 3.11+
+for the `mta` CLI.
+
+```bash
+mta init my_mod        # copy this SDK into a new module project
+cd my_mod
+mta doctor             # verify the environment
+mta build              # build/my_mod.dll (win-mingw preset by default)
+mta test               # unit + embedded-Lua suites
+```
+
+Copy the produced `build/win-mingw/module/win-x64/my_mod.dll` (or the
+`.so` from the linux-gcc preset) into your MTA server's `modules/` directory
+and list it in `mtaserver.conf`. The module logs its identity at load:
+
+```text
+module: loaded my_mod (module 2.1, sdk 1.0.0, abi 1; MTA 1.6.0-9.21788.0)
+```
+
+## Create your first function
+
+`mta new function player_bonus` generates a compile-ready skeleton in
+`source/functions/` — source discovery picks it up on the next build, no
+CMake edits needed. Body style gives you direct control of the Lua stack
+through the typed reader:
+
+```cpp
+MTA_FUNCTION("player_bonus", "Computes a bonus from level and multiplier.")
+{
+    auto [level, factor] = mta::lua::args<double, double>(L);
+    return mta::lua::push_results(L, level * factor);
+}
+```
+
+```lua
+player_bonus(10, 1.5)      -- 15
+```
+
+## Function arguments and errors
+
+The binder derives everything from the declared parameter types. Missing
+arguments, wrong types and invalid objects raise errors a Lua developer can
+read without opening C++:
+
+```lua
+player_bonus(10)     -- error: bad argument #2 to 'player_bonus'
+                     -- (expected number, got no value)
+```
+
+Optional parameters use `std::optional<T>`, variadic tails use
+`mta::lua::args` with `rest_args`, and `mta::Resource` parameters are
+validated live against the running server. The full behavior — including
+return values, multiple results and tables — is specified in
+[other/documents/example.md](other/documents/example.md).
+
+## Tables / callbacks / async / timers
+
+```cpp
+// Async: heavy work on a worker thread, completion on the main thread.
+MTA_FUNCTION("sum_slow", "Sums two numbers in the background.")
+{
+    auto [a, b] = mta::lua::args<double, double>(L);
+    mta::async::run([a, b] { return a + b; },
+                    [](const mta::lua::Arguments &results, const char *error)
+                    {
+                        // Arguments owns its values: safe across threads.
+                    });
+    return 0;
+}
+
+// One-shot timer, cancelled automatically when the resource stops.
+mta::timer::after(L, 1500, [] { mta::log::info("1500 ms tick"); });
+```
+
+Callbacks are held by reference with the owning resource recorded; they
+survive across calls and are invalidated when their resource stops.
+
+## Project structure
+
+```text
+config/module.toml     module identity + build options (single source)
+config/cmake/          the CMake implementation (core, lua, platform, install)
+source/mta/sdk.hpp     the public facade developers include
+source/sdk/            the framework: abi, lua, bind, runtime, registry,
+                       objects, resources, events, logging, errors
+source/functions/      developer functions (samples included)
+source/library/base/   reusable, module-agnostic utilities
+other/documents/       example.md, api.md, architecture.md, TUTORIAL.md
+other/tests/           unit + embedded-Lua + real-server integration suites
+other/server/          pinned MTA server test infrastructure
+other/tools/           docgen + the `mta` CLI
+other/third_party/     vendored Lua 5.1 + MTA SDK server headers
+```
+
+## Configuration
+
+`config/module.toml` is the single configuration file. The build reads it
+directly; the CLI reads the same file.
 
 ```toml
 [module]
-name = "base"              # -> base.dll / base.so, mtaserver.conf <module src="base"/>
-title = "Base Module"      # console name shown when the module loads
-author = "Developer"       # console author
-version = "2.0.0"          # the Module version float (plan §38: the SDK and
-                           # ABI versions live separately in source/sdk/version.hpp)
+name = "base"            # -> base.dll / base.so
+title = "Base Module"    # shown in the load diagnostic
+author = "Developer"
+version = "2.1.0"        # the Module version float (2.1)
 
 [build]
 cxx_standard = 20
@@ -118,7 +170,7 @@ unity = true
 lto = true
 
 [async]
-workers = "auto"           # worker threads for background tasks
+workers = "auto"         # or a fixed worker count
 queue = 4096
 
 [features]
@@ -128,313 +180,81 @@ events = true
 objects = true
 ```
 
-Change `name`, reconfigure, and the artifact becomes `my_mod.dll` — nothing
-else to touch. Advanced users can still override any value per configure
-with CMake cache variables (the TOML stays the default):
+Every value can be overridden per configure with CMake cache variables
+(`-DSDK_MODULE_NAME=my_mod`, `-DSDK_UNITY=OFF`, ...).
+
+## Build
 
 ```bash
-cmake --preset win-mingw -DSDK_MODULE_NAME=my_mod
-cmake --preset win-mingw -DSDK_MODULE_TITLE="My Module" -DSDK_MODULE_AUTHOR="Jane Doe"
+mta build                    # default preset for this OS
+mta build --preset win-msvc  # or a specific one
+cmake --preset win-mingw     # raw CMake works too
+cmake --build build/win-mingw
 ```
 
-- `SDK_MODULE_NAME` — output binary name **without extension**; default
-  `base` (produces `base.dll` on Windows, `base.so` on Linux). It also names
-  the CPack ZIP and the Windows export table (module.def.in).
-- `SDK_MODULE_TITLE` / `SDK_MODULE_AUTHOR` — the name/author the server
-  shows in the console when the module loads.
+Presets: `win-mingw` (default on Windows), `win-msvc`, `linux-gcc`. All
+presets build with unity + LTO and treat warnings as errors.
 
-The parser lives in `cmake/core/module-config.cmake`; `[async]` and
-`[features]` are consumed by the subsystems that own them (async, objects).
-See [other/documents/architecture.md](other/documents/architecture.md#6-configuration--no-source-edits-needed).
-
-## Building
-
-Requirements: CMake ≥ 3.27, Ninja and a compiler with C++20 and std::thread
-(MinGW-w64 posix-threads, MSVC 2019+ or GCC/Clang on Linux).
+## Test
 
 ```bash
-# Windows (MinGW-w64)
-cmake --preset win-mingw && cmake --build --preset win-mingw
-
-# Windows (MSVC)
-cmake --preset win-msvc && cmake --build --preset win-msvc
-
-# Linux (GCC)
-cmake --preset linux-gcc && cmake --build --preset linux-gcc
+mta test unit           # configuration parser tests (CMake script mode)
+mta test lua            # embedded Lua 5.1 harness, every function + regressions
+mta test integration    # pinned real MTA server (see below)
+mta test                # all of the above
+ctest --preset win-mingw --output-on-failure   # the same via CTest
 ```
 
-Artifact: `build/<preset>/module/<platform>-<arch>/<SDK_MODULE_NAME>.dll`
-(e.g. `module/win-x64/base.dll`); the MinGW runtime is linked statically.
+## MTA Server integration
 
-## Server installation
-
-1. Copy `base.dll` (or your `SDK_MODULE_NAME`) into the server's
-   mods/deathmatch/modules/.
-2. Add <module src="base"/> (the file name without extension) to
-   mtaserver.conf.
-3. Restart the server. The module's load diagnostic shows its identity and
-   the four separate version entities (plan §38):
-
-```
-module: loaded base (module 2.0, sdk 1.0.0, abi 1; MTA 1.6.0-9.21788.0)
-```
-
-Module bitness = server bitness (modern MTA is x64).
-
-## Writing functions
-
-### A simple function
-
-```cpp
-#include <mta/sdk.hpp>
-
-MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
-{
-    auto [a, b] = mta::lua::args<double, double>(L);
-    return mta::lua::push_results(L, a + b);
-}
-```
-
-Body style is the main one; for one-liners use the lambda style:
-
-```cpp
-MTA_FUNCTION("my_sum2", "Adds two numbers.",
-    [](double a, double b) { return a + b; });
-```
-
-mta::lua::args<...>(L) reads arguments in order: each type is checked
-automatically and a wrong type gives the Lua scripter a readable error —
-bad argument #2 to 'my_sum' (expected number, got string); a missing
-argument gives (expected number, got no value). Extra arguments are
-ignored.
-
-### Types and several results
-
-```cpp
-MTA_LUA_FUNCTION("my_div", "Divides two numbers.")
-{
-    auto [a, b] = mta::lua::args<double, double>(L);
-    if (b == 0.0)
-    {
-        mta::lua::raise_error("my_div: division by zero");  // -> Lua error
-    }
-    return mta::lua::push_results(L, a / b);
-}
-
-// several results per call:
-MTA_LUA_FUNCTION("my_minmax", "Minimum and maximum.")
-{
-    auto [a, b] = mta::lua::args<double, double>(L);
-    return mta::lua::push_results(L, std::min(a, b), std::max(a, b));
-}
-
-// a variable number of results via Arguments:
-MTA_LUA_FUNCTION("my_range", "Numbers from 'from' to 'to'.")
-{
-    auto [from, to] = mta::lua::args<std::int64_t, std::int64_t>(L);
-    mta::lua::Arguments result;
-    for (auto i = from; i <= to; ++i) result.push_number(static_cast<lua_Number>(i));
-    return result.push(L);
-}
-```
-
-### Optional arguments
-
-```cpp
-// std::optional<T>: nil or absence -> nullopt, default via value_or.
-MTA_LUA_FUNCTION("my_greet", "Greets a name.")
-{
-    auto [name, greeting] = mta::lua::args<std::string, std::optional<std::string>>(L);
-    return mta::lua::push_results(L, greeting.value_or("hello") + ", " + name);
-}
-```
-
-### Tables
-
-```cpp
-MTA_LUA_FUNCTION("my_table_demo", "Table example.")
-{
-    auto [table] = mta::lua::args<mta::lua::Table>(L);   // non-table -> error
-    double sum = 0.0;
-    for (const auto &value : table.array)
-    {
-        if (value.type() == mta::lua::Argument::Type::Number)
-        {
-            sum += value.as_number();
-        }
-    }
-
-    mta::lua::Table result;
-    result.fields.emplace_back("sum", mta::lua::Argument(sum));
-    return mta::lua::push_results(L, mta::lua::Argument(std::move(result)));
-}
-```
-
-mta::lua::Argument accepts ANY value (tables recursively, up to 32 levels).
-
-### Variadics (unknown argument count)
-
-```cpp
-MTA_LUA_FUNCTION("my_echo", "Returns every argument back.")
-{
-    mta::lua::Arguments arguments;
-    arguments.read(L);
-    lua_settop(L, 0);
-    return arguments.push(L);
-}
-```
-
-### Async function and timers
-
-```cpp
-#include <mta/sdk.hpp>
-
-#include <memory>
-
-MTA_LUA_FUNCTION("my_async", "Computes in the background; callback(result) runs on DoPulse.")
-{
-    auto [value, callback] = mta::lua::args<double, mta::async::Callback>(L);
-    auto cb = std::make_shared<mta::async::Callback>(std::move(callback));
-
-    mta::async::Task task = mta::async::run(
-        L,
-        [value] {                       // background thread: NO Lua!
-            mta::lua::Arguments result;
-            result.push_number(heavy(value));
-            return result;
-        },
-        [cb](const mta::lua::Arguments &result, const char *error) {
-            if (error != nullptr) { mta::log::error("my_async: ", error); return; }
-            cb->call(result);           // main thread: safe
-        });
-
-    return mta::lua::push_results(L, task.valid());
-}
-```
-
-Callback is a parameter type: binding the Lua function and auto-release are
-handled by the framework; the task is owned by the calling resource — a
-resource stop cancels queued tasks and a callback/task/timer armed before a
-restart is structurally unable to reach the fresh generation (plan §12/§14).
-Timers — see source/functions/async/timers.cpp
-(sample_timer/sample_timer_cancel). Callback is move-only — wrap it in
-make_shared when capturing into a completion.
-
-### Per-resource state
-
-```cpp
-namespace
-{
-struct MySession { std::string token; int requests = 0; };
-mta::resources::Store<MySession> g_sessions;   // one static per .cpp
-}
-
-MTA_LUA_FUNCTION("my_session_hit", "Hit counter of the resource.")
-{
-    MySession &session = g_sessions.for_state(L);   // the VM is available in the body
-    ++session.requests;
-    return mta::lua::push_results(L, static_cast<lua_Number>(session.requests));
-}
-```
-
-The record is erased automatically when the resource stops.
-
-### Logging
-
-```cpp
-mta::log::info("cache loaded: ", count, " entries");
-mta::log::error("load failed: ", code);
-mta::log::debug(L, "called with ", n, " arguments");   // bound to the resource
-```
-
-### Direct stack access (exotic)
-
-The function body has lua_State *L available — you can do anything with the
-stack directly:
-
-```cpp
-MTA_LUA_FUNCTION("my_raw", "Description.")
-{
-    return lua_gettop(L);   // any low-level code; the framework catches exceptions
-}
-```
-
-A live example is source/functions/raw/stack_dump.cpp.
-
-### Lambda style (short one-liners)
-
-For one-liners there is a second macro, MTA_LUA_FUNC with a lambda: types
-are read from the signature and the return is automatic:
-
-```cpp
-MTA_LUA_FUNC("my_sum", "Adds two numbers.",
-    [](double a, double b) { return a + b; });
-```
-
-## Argument and result types
-
-| Argument in args<...> | From Lua |
-|---|---|
-| double, float | number |
-| int, int64_t, … | integer (range-checked) |
-| bool | boolean |
-| std::string / std::string_view | string |
-| mta::lua::Argument | any value (tables recursively) |
-| mta::lua::Table | table |
-| mta::async::Callback | function (stable reference) |
-| std::optional<T> | T or nil/nothing |
-| mta::lua::rest_args | trailing arguments (variadic tail) |
-| mta::lua::context | consumes no argument: VM + calling resource |
-| mta::Resource | a live resource, by name (validated on every call) |
-
-| Result in push_results | In Lua |
-|---|---|
-| a value (number/string/bool/table/…) | one result |
-| several values separated by commas | several results |
-| mta::lua::Arguments (+ push) | a whole result list |
-| nullptr | nil |
-
-A wrong argument type becomes a readable Lua error like
-bad argument #1 to 'my_greet' (expected string, got table) — straight from
-args<...>; no manual checks are needed.
-
-## Safety rules
-
-1. Never store lua_State * between calls. A resource's VM dies when the
-   resource stops. For deferred calls use mta::async::Callback; for data use
-   mta::resources::Store.
-2. Touch Lua only on the main thread. From workers — pure C++, results via
-   mta::async::run -> DoPulse.
-3. Functions are global for every resource — give them unique names.
-4. Exceptions never leave the module: the macros translate everything into
-   Lua errors; the C++ stack unwinds correctly.
-5. Module bitness = server bitness.
-
-## Testing
+The integration runner provisions a pinned MTA server build
+(other/server/), installs the built module, choreographs resource
+start/stop/restart across generations and verifies that no stale callback,
+task or timer can reach the new VM:
 
 ```bash
-mta test unit          # ctest fixtures (config reader)
-mta test lua           # embedded Lua harness: scripts/*.lua + benchmarks
-ctest --preset win-mingw   # both suites, as CI runs them
+mta server install      # once: download + unpack the pinned build
+mta test integration
 ```
 
-The harness (other/tests/lua/harness.cpp) starts a clean Lua 5.1, installs a mock
-manager and runs other/tests/lua/scripts/*.lua: basic functions, tables, async,
-timers and every binder feature (optional, multiple results, variadics,
-direct stack) plus the informational benchmarks (090-095). Add your own
-scripts — they are picked up automatically. The real-server end-to-end suite
-lives in other/tests/integration/ (`mta test integration`).
+No developer-installed server is used; the build identity is recorded in
+`other/server/install.json` (not committed).
 
-## CI and releases
+## Documentation
 
-GitHub Actions builds and tests the module on Linux (GCC and Clang) and
-Windows (MinGW-w64 and MSVC), runs `mta doctor`, a CLI smoke pass and the
-real-server integration. Pushing a version tag triggers the release
-pipeline (build → test → blocking integration on the MinGW leg → package →
-publish) and attaches exactly the module binaries — `<module>.dll` /
-`<module>.so` — to a GitHub Release (plan §36/§37; see .github/workflows/).
+- [example.md](other/documents/example.md) — the practical manual: every
+  feature with C++ + Lua + expected result.
+- [api.md](other/documents/api.md) — the full API reference (facade,
+  binder, runtime, objects, config, CLI).
+- [architecture.md](other/documents/architecture.md) — layers, value
+  model, lifetimes, build system, test pyramid.
+- [TUTORIAL.md](other/documents/TUTORIAL.md) — a guided first module.
+- [GUIDES.md](other/documents/GUIDES.md) — task-oriented recipes.
+- [migration-v1-to-v2.md](other/documents/migration-v1-to-v2.md) — upgrading
+  a V1-style module.
 
-The module title/author and binary name are configured in
-config/module.toml (see [Module identity](#configuration-configmoduletoml));
-versions are kept separate (plan §38): the Module version lives in
-module.toml, the SDK and ABI versions in source/sdk/version.hpp.
+## Supported platforms
+
+| Platform | Compiler | Status |
+| --- | --- | --- |
+| Windows x64 | MinGW-w64 (GCC 13+) | built + tested in CI, releases |
+| Windows x64 | MSVC (VS 2022+) | built + tested in CI, release artifact |
+| Linux x64 | GCC | built + tested in CI, release artifact |
+| Linux x64 | Clang | built + tested in CI |
+
+The MTA server ABI is the 64-bit module ABI (`ILuaModuleManager10`); the
+SDK bundles byte-identical Lua 5.1 headers with the server's `luaL_newstate`
+extension and verifies that identity in CI.
+
+## Release status
+
+`v2.1.0` — refinement release: canonical repository layout
+(`source/`, `config/`, `other/`), the full `mta` CLI, doctor diagnostics,
+an embedded Lua suite (216 checks) plus benchmarks, and a pinned real-server
+integration suite (20 scenarios) running in CI on every push and in the
+release pipeline before packaging. Releases attach exactly
+`<module>.dll` / `<module>.so` — no source archives, no debug artifacts.
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 HoloDev
