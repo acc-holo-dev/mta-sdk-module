@@ -32,17 +32,20 @@ Result: build/win-mingw/module/win-x64/base.dll (or .so on Linux).
 ## Step 3. Run the tests
 
 ```bash
-ctest --preset win-mingw
+mta test unit          # ctest unit fixtures
+mta test lua           # embedded Lua harness (scripts/*.lua)
 ```
 
-You should see 100% tests passed. That means the base works.
+or plain `ctest --preset win-mingw`. You should see 100% tests passed. That
+means the base works.
 
 ## Step 4. Add your first function
 
-Create source/functions/basics/my_sum.cpp:
+Create source/functions/basics/my_sum.cpp — one .cpp is all it takes; the
+build and the registration pick it up automatically:
 
 ```cpp
-#include "registry/registry.hpp"
+#include <mta/sdk.hpp>
 
 MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 {
@@ -51,38 +54,39 @@ MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 }
 ```
 
-Rebuild — the my_sum function is already available. No CMake or central file
-edits needed: the build picks up new .cpp files automatically.
+Rebuild — the my_sum function is already available. No CMake, no registry or
+central file edits needed (plan §3: a new .cpp lands in the build by itself).
 
 ## Step 5. Rename the module
 
-Name, author and the output binary are CMake cache variables — rename with
-one configure line, no C++ edits:
+The module identity lives in exactly one file — config/module.toml (plan §5):
 
-```bash
-cmake --preset win-mingw \
-    -DSDK_MODULE_NAME=my_mod \          # -> my_mod.dll / my_mod.so
-    -DSDK_MODULE_TITLE="My Module" \    # console name
-    -DSDK_MODULE_AUTHOR="Jane Doe"      # console author
-cmake --build --preset win-mingw
+```toml
+[module]
+name = "my_mod"        # -> my_mod.dll / my_mod.so
+title = "My Module"
+author = "Jane Doe"
 ```
 
-Default values are `base` / `Base Module` / `anon`.
+The binary name, the CMake target names, the registration metadata, `mta
+package` output and `mta doctor` diagnostics all derive from `[module]` —
+nothing is duplicated in C++ sources. (CMake cache variables
+`-DSDK_MODULE_NAME=...` etc. still work, as explicit overrides.)
 
 ## Step 6. Install on the server
 
-1. Copy `base.dll` (or your chosen name) into the server's
-   mods/deathmatch/modules/.
+1. Copy `my_mod.dll` (or `.so`) into the server's mods/deathmatch/modules/.
 2. Add to mtaserver.conf:
 
 ```xml
-<module src="base"/>
+<module src="my_mod"/>
 ```
 
-3. Restart the server. The console shows:
+3. Restart the server. The module's load diagnostic shows its identity and
+   the four separate version entities (plan §38):
 
 ```
-MODULE: Loaded "Base Module" (1.10) by "anon"
+module: loaded my_mod (module 0.1, sdk 1.0.0, abi 1; MTA 1.6.0-9.21788.0)
 ```
 
 ## Step 7. Check in Lua
@@ -96,7 +100,8 @@ outputChatBox("2 + 3 = " .. my_sum(2, 3))  -- 2 + 3 = 5
 ## What's next
 
 - [README.md](../README.md) — every function recipe.
-- [API.md](API.md) — the complete API reference.
+- [api.md](api.md) — the complete API reference.
 - [GUIDES.md](GUIDES.md) — advanced topics (threads, async, tables).
-- [ARCHITECTURE.md](ARCHITECTURE.md) — how the system is put together.
+- [architecture.md](architecture.md) — how the system is put together.
+- [example.md](example.md) — a complete feature, end to end.
 - source/functions/ — live examples of every feature.

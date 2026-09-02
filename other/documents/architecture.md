@@ -148,15 +148,6 @@ the function metadata without a module manager; object methods
   **current** `lua_State` for exactly one synchronous call — typed argument
   readers (`args<Ts...>()`, `check_*`/`opt_*`), `top()`, `resource_name()`,
   `push_results(...)` — spelled `MTA_STATE(L)` at the call site.
-
-**View vs Snapshot (plan §18/§45).** The two halves are deliberately not
-interchangeable. A *View* (`mta::state`) is borrowed: main thread only,
-valid only while the call runs, never cached, never passed to another
-thread. A *Snapshot* (`mta::lua::{Argument, Table, Arguments}`) is owned:
-it copies its data (strings copied, tables read recursively) and is the
-**only** thing that may cross the async boundary to worker threads and
-back. A raw `lua_State*` never crosses a thread boundary — a resource's VM
-dies with the resource and a restart runs a fresh VM (§4.4, plan §14).
 * `bind/bind.hpp` — the typed binder: reads parameters from the stack
   (`args<double, double>(L)` and lambda parameters), synthesizes
   `optional`/`rest_args`/defaults, applies `context`, pushes results
@@ -169,6 +160,16 @@ dies with the resource and a restart runs a fresh VM (§4.4, plan §14).
   method call records its `MethodInfo` metadata and `MTA_OBJECT`-named types
   list themselves in `mta::userdata::object_types()` for the docs generator.
 * `events/events.hpp` — `mta::events::trigger` (module → Lua events).
+
+**View vs Snapshot (plan §18/§45).** The two halves of the value model are
+deliberately not interchangeable. A *View* (`mta::state`) is borrowed:
+main thread only, valid only while the call runs, never cached, never
+passed to another thread. A *Snapshot*
+(`mta::lua::{Argument, Table, Arguments}`) is owned: it copies its data
+(strings copied, tables read recursively) and is the **only** thing that
+may cross the async boundary to worker threads and back. A raw
+`lua_State*` never crosses a thread boundary — a resource's VM dies with
+the resource and a restart runs a fresh VM (§4.4, plan §14).
 
 ### 3.4 `source/sdk/runtime/` + `resources/` + `native/` + `logging/` — the engine
 

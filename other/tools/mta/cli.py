@@ -6,7 +6,7 @@ Commands:
     mta new function <name>    minimal compile-ready function (name verbatim)
     mta new object <name>      skeleton native object (stable MTA_OBJECT id)
     mta build [--preset P]     configure + build via CMake presets
-    mta test [unit|lua|integration]   all = unit + lua + integration suites
+    mta test [all|unit|lua|integration]  --preset P; all = unit + lua + integration
     mta docs [--output FILE]   registry documentation from signature metadata
     mta doctor                 real environment checks
     mta package [--release-name]  copy the built module into dist/

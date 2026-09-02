@@ -1,4 +1,4 @@
-# source/library
+# source/library/base
 
 Reusable, module-internal C++ code shared by several functions.
 

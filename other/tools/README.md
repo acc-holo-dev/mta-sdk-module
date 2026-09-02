@@ -15,4 +15,6 @@ mta new function X  # scaffold a new Lua-exposed function
 mta new object X    # scaffold a new native object
 ```
 
-See `other/tools/mta/README.md` for the full command reference.
+Run `mta --help` (or `python other/tools/mta/cli.py --help`) for the full
+command reference; the CLI surface is also documented in
+`other/documents/api.md`, "The `mta` CLI".

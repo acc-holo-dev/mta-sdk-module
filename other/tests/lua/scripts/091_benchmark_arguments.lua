@@ -38,7 +38,13 @@ local elapsedm = measure("argument conversion: bench_args_mixed (4 typed values)
 end)
 
 -- derived: per-number conversion cost from the 2-number vs 8-number call rate
+-- (sub-0.1 s timings carry jitter; a negative derivation means the two rates
+-- are within measurement noise and the marginal cost is reported as ~0)
 local per_number_us = (elapsed8 / (8 * 400000) - elapsed2 / (2 * 1000000)) * 1e6
-print(string.format("benchmark: derived marginal per-number conversion cost ~ %.3f us", per_number_us))
+if per_number_us < 0 then
+    print("benchmark: derived marginal per-number conversion cost ~ 0 (within measurement noise)")
+else
+    print(string.format("benchmark: derived marginal per-number conversion cost ~ %.3f us", per_number_us))
+end
 print(string.format("benchmark: number conversions/s ~ %.0f (from bench_args_sum8)",
                     8 * 400000 / elapsed8))

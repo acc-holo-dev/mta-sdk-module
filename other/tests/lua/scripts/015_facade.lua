@@ -29,3 +29,17 @@ local view = sample_state()
 test_assert(type(view) == "table" and view.resource == "test_resource",
             "mta::state reports the calling resource")
 test_assert(type(view.top) == "number", "mta::state exposes the stack depth")
+
+-- the view's typed readers (check_*) and its push_results: values travel
+-- through the same conversions as the free mta::lua helpers
+local num, int, flag, text = sample_state_readers(2.5, 7, true, "hi")
+test_assert(num == 2.5 and int == 7 and flag == true and text == "hi",
+            "mta::state typed readers round-trip number/integer/boolean/string")
+local okv, errv = pcall(sample_state_readers, "bad", 1, true, "x")
+test_assert(not okv, "the state view rejects a wrong argument type")
+test_assert(errv == "bad argument #1 to 'sample_state_readers' (expected number, got string)",
+            "typed reader error carries the function name and position")
+local okm, errm = pcall(sample_state_readers, 1)
+test_assert(not okm, "the state view rejects a missing argument")
+test_assert(errm == "bad argument #2 to 'sample_state_readers' (expected integer, got no value)",
+            "typed reader missing-argument error message")

@@ -219,3 +219,17 @@ Remote: `https://github.com/acc-holo-dev/mta-sdk-module.git` (origin), ветк�
    из version.hpp).
 7. Тестирование/сборка волны выполняются централизованным этапом
    (запрещено до наступления этапа по плану владельца).
+
+## 10. Централизованный этап (дополнено после него)
+
+Выполнен на этой машине (vendored toolchain развёрнут в `build/toolchain/`,
+вне git: CMake 4.4.2 + Ninja 1.13.2 + GCC 16.2.0 UCRT; Python 3.12.8
+embeddable в `build/toolchain/python` — на машине нет системных python/cmake):
+
+- `cmake --preset win-mingw` + build (unity, -Werror) — **зелёные**;
+- `mta doctor` — **Status: READY** (SDK/ABI версии раздельно);
+- `mta test unit` — 2/2 passed; `mta test lua` — `harness: passed 216,
+  failed 0, script errors 0` (включая новые 015-проверки LuaView-ридеров
+  и бенчмарки 092-095; измеренный baseline записан в Problem_12.md);
+- `mta test integration` — см. финальный push (результат фиксируется в
+  CHANGELOG/финальном сообщении коммита волны).

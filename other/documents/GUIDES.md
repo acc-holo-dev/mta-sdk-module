@@ -214,8 +214,7 @@ Exceptions are caught by the framework here too. Never store L between calls.
 Objects with methods and a destructor — like in the sockets/mysql libraries.
 
 ```cpp
-#include "lua/userdata.hpp"
-#include "registry/registry.hpp"
+#include <mta/sdk.hpp>
 
 namespace
 {

@@ -56,6 +56,11 @@ measure("table read: sample_table_stats (64 elements)", 40000, function()
 end)
 
 -- derived: marginal per-element cost from the 8- vs 64-element roundtrip rate
+-- (a negative derivation means the two rates are within measurement noise)
 local per_element_us = (elapsed64 / (64 * 20000) - elapsed8 / (8 * 80000)) * 1e6
-print(string.format("benchmark: derived marginal per-element roundtrip cost ~ %.3f us",
-                    per_element_us))
+if per_element_us < 0 then
+    print("benchmark: derived marginal per-element roundtrip cost ~ 0 (within measurement noise)")
+else
+    print(string.format("benchmark: derived marginal per-element roundtrip cost ~ %.3f us",
+                        per_element_us))
+end

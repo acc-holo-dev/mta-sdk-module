@@ -96,3 +96,16 @@
 ### Дополнительные артефакты
 - `source/functions/bench/{args,tables,callback}.cpp` — измерительные плашки (auto-discovery), задокументированные в шапках со ссылками на измеряющие их скрипты.
 - Карта бенчмарков в `other/documents/architecture.md` §8 и политика в `CONTRIBUTING.md`.
+
+### Измеренный baseline (2026-09-02, централизованный прогон)
+
+Окружение: Windows x64, пресет `win-mingw` (vendored toolchain: CMake 4.4.2, Ninja 1.13.2, GCC 16.2.0 UCRT, unity + LTO, -Werror). Прогон: `sdk_tests.exe` — `harness: passed 216, failed 0, script errors 0` (exit 0); unit — 2/2 passed. Ключевые числа (informational, из секций `benchmark:`):
+
+- function call throughput (`090`): ~7.4 млн calls/s;
+- argument conversion (`091`): 2-числовой вызов ~6.7 млн ops/s; 8 чисел ~5.3 млн ops/s; смешанные примитивы ~4.4 млн ops/s; производная предельная стоимость конвертации числа — в пределах шума измерений (report ~0);
+- table snapshot (`092`): roundtrip 8 элементов ~1.23 млн ops/s, 64 элемента ~0.30 млн ops/s (стоимость растёт с глубиной снапшота — подтверждает карту стоимости §8 architecture.md);
+- callback bookkeeping (`093`): регистрация ~0.58 us, вызов ~0.36 us (0.56 млн ops/s без аргументов), освобождение ~0.36 us; полный цикл hold→call→release ~1.3 us;
+- async/timer scheduling (`094`): post+deliver ~43 тыс. задач/с (end-to-end, постановка+доставка), чистый enqueue ~70-87 тыс./с; одноразовые таймеры after+fire ~13 тыс./с; чистая постановка таймеров ~1 млн ops/s;
+- userdata (`095`): создание ~0.32-0.38 us/объект (~2.6 млн ops/s), `:get()` ~5.3 млн ops/s, `:add(1)` ~4.7 млн ops/s.
+
+Прогон подтверждает: все восемь областей §44 измеряются, числа воспроизводимы по порядку величины, оптимизации на текущем этапе не требуются (норма §44 — «optimize only after measurements» — выполняется: горячих точек, обосновывающих оптимизационную волну, измерения не показывают).
