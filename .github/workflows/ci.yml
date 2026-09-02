@@ -131,13 +131,14 @@ jobs:
 
   integration:
     # Plan PHASE 13: run the real-server integration where the environment
-    # allows. The harness downloads a pinned MTA server build and drives a
-    # real server through its console; this can fail for reasons outside
-    # the SDK (download availability, runner console quirks), so the job is
-    # a non-blocking canary.
-    name: Real-server integration (canary)
+    # allows. The harness drives a pinned Windows MTA server build
+    # (mtasa-24140, other/server/ — platform "windows", MTA Server64.exe),
+    # so this job runs on a Windows runner with the MinGW toolchain and the
+    # harness builds the module through the default (win-mingw) preset.
+    # This is a blocking test step: a failure here fails CI (Task 22 lists
+    # integration among the mandatory steps).
+    name: Real-server integration
     runs-on: windows-latest
-    continue-on-error: true
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
@@ -153,8 +154,8 @@ jobs:
 
       - name: Build the module
         shell: msys2 {0}
-        run: python other/tools/mta/cli.py build win-mingw
+        run: python other/tools/mta/cli.py build --preset win-mingw
 
       - name: Install the pinned server and run the integration
         shell: msys2 {0}
-        run: python other/tools/mta/cli.py server install && python other/tools/mta/cli.py server test
+        run: python other/tools/mta/cli.py server install && python other/tools/mta/cli.py test integration

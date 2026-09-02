@@ -13,6 +13,19 @@
 //     mta::log::warn("suspicious value: ", value);
 //     mta::log::error("request failed: ", reason);
 //     mta::log::debug(L, "called in resource context");
+//
+// Automatic context (plan §20): the framework prefixes every message with
+// the parts it knows about the current call site -- the module identity and,
+// on the main thread / inside async dispatch, the running function, the
+// task/timer id and the owning resource. Developers never pass these values:
+// the registration trampolines and the async dispatcher fill the thread-local
+// diagnostic context (sdk/lua/protect.hpp), and every writer prepends it:
+//
+//     [Base Module:sample_timer @ play] sample timer: duplicate timer id 3
+//     [Base Module task #7 @ play] async completion failed: ...
+//
+// debug(L, ...) skips the resource part -- MTA's DebugPrintf already
+// attributes VM-based debug messages.
 
 #include <sstream>
 #include <string>
@@ -100,7 +113,9 @@ void debug(lua_State *lua_vm, Args &&...args)
     }
 }
 
-// Debug message outside a VM context (no resource attribution).
+// Debug message outside a VM context: no DebugPrintf attribution, so the
+// automatic prefix carries the resource from the diagnostic context when it
+// is known (e.g. inside a module function).
 template <typename... Args>
 void debug(Args &&...args)
 {

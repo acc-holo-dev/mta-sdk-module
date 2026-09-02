@@ -295,3 +295,9 @@ mta::log::error("error: ", reason);
 
 The default level is Info: debug is hidden, info/warn/error are visible.
 set_level(Level::Off) disables everything except error.
+
+You never pass module/function/resource/task context yourself: the framework
+prefixes each message with what it knows about the current call site
+(`[Base Module:my_fn @ play] ...`; async delivery adds `task #N` / `timer
+#N`, see "Logging" in `other/documents/api.md`). Write plain messages and let
+the framework attribute them.

@@ -8,7 +8,7 @@ MTA_LUA_FUNCTION("module_functions",
     "Returns a table {name = description} with all module functions.")
 {
     mta::lua::Table table;
-    for (const auto &spec : mta::registry::Registry::instance().functions())
+    for (const auto &spec : mta::registered_functions())
     {
         table.fields.emplace_back(
             spec.name, mta::lua::Argument(std::string(spec.description ? spec.description : "")));
@@ -21,7 +21,7 @@ MTA_LUA_FUNCTION("module_signature",
 {
     auto [name] = mta::lua::args<std::string>(L);
 
-    for (const auto &spec : mta::registry::Registry::instance().functions())
+    for (const auto &spec : mta::registered_functions())
     {
         if (name != spec.name)
         {

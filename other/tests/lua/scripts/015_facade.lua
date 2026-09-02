@@ -22,3 +22,10 @@ local ok2, err2 = pcall(sample_hello)
 test_assert(not ok2, "facade lambda rejects a missing argument")
 test_assert(err2 == "bad argument #1 to 'sample_hello' (expected string, got no value)",
             "missing-argument error message")
+
+-- MTA_STATE / mta::state: the borrowed state view over the calling VM
+-- (plan §18); synchronous use only.
+local view = sample_state()
+test_assert(type(view) == "table" and view.resource == "test_resource",
+            "mta::state reports the calling resource")
+test_assert(type(view.top) == "number", "mta::state exposes the stack depth")

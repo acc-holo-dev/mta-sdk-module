@@ -50,6 +50,9 @@ bool register_function(const char *name, const char *description, int (*entry)(l
     }
     mta::registry::Spec spec{name, description, entry};
     spec.signature = signature;
+    // The capability flags were derived together with the signature
+    // (plan §9); the descriptor keeps its own copy for inspection.
+    spec.flags = signature.flags;
     mta::registry::Registry::instance().add(std::move(spec));
     return true;
 }

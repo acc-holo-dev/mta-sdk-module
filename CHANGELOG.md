@@ -8,6 +8,35 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Native MTA types as typed binder arguments/results (plan §6/§17): a
+  `mta::Resource` parameter is resolved by name and validated live through
+  the module manager on every call (`bind.hpp`), an unknown or already
+  stopped resource raises a readable
+  `bad argument #N to 'name' (no running resource '...')` error, and a
+  returned `Resource` is pushed to Lua as its name (`push_one` ADL hook in
+  `native/resource.hpp`); `std::optional<mta::Resource>` accepts
+  `nil`/absence. Samples `sample_resource_arg`, `sample_resource_arg_optional`,
+  `sample_resource_return` (`source/functions/native/resource_args.cpp`),
+  regression-tested in `060_features.lua`. Player/Element/Vehicle wrappers
+  remain intentionally absent behind the frozen module ABI (documented).
+- Signature metadata completion (plan §9/§10): `Signature` derives capability
+  flags (`variadic`, `callback`) that the registration bridge stores in
+  `Spec::flags`; object methods record `MethodInfo` metadata
+  (name + self-excluded signature) and `MTA_OBJECT` types list themselves in
+  `mta::userdata::object_types()`; `mta docs` (`sdk_docgen`) now renders
+  argument/return details, category (explicit `n/a` until a registration
+  spelling provides one), flags, an explicit errors marker and a new
+  "Object types" section (methods materialized in a scratch VM).
+- Typed `rest_args`/`context` sample functions
+  (`source/functions/basics/typed_params.cpp`: `sample_rest_count`,
+  `sample_context_caller`) with binder tests in `040_binder.lua` (plan §6).
+- `example.md` §9: the canonical `sum` example (`MTA_FUNCTION("sum", ...)`,
+  the `sum(10, 20)` / `sum(10)` / `sum("10", 20)` calls with their results
+  including the conceptual `argument #2 is missing` / `argument #1 has
+  invalid type` conditions mapped to the plan §7 format), the supported
+  parameter/result types, the error-generation mechanism, manual validation
+  and the cases where automatic binding is insufficient (plan §8).
+
 - Definition-of-done sweep (plan §50): the `source/library/` layer now
   exists with real content — `library/base/handle_map.hpp`
   (`mta::library::base::HandleMap<Id, Handle>`), the id → handle registry

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MTA server test harness (plan PROMT.md §30-§32).
+"""MTA server test harness (plan PROMT.md §30-§33).
 
 Manages a PINNED, locally-installed MTA:SA server for integration tests:
 
@@ -9,8 +9,23 @@ Manages a PINNED, locally-installed MTA:SA server for integration tests:
     mta_server.py start      start the server (kept running; debug use)
     mta_server.py stop       stop a server started by `start`
     mta_server.py test       full integration run (build module, temp server
-                             dir, module install, test resource, markers,
-                             resource restart, graceful stop, log capture)
+                             dir, module install, test resources, scenario
+                             choreography, graceful stop, log capture)
+
+The integration test suite itself lives in other/tests/integration/:
+
+    main_resource.lua      the "sdkintegration" resource: every §32 scenario
+                           reports its own "SCENARIO <name>: PASS|FAIL"
+                           marker; three generations are choreographed by
+                           this harness (stop/start cycle, console restart)
+    witness_resource.lua   the "sdkintegration2" resource: multi-resource
+                           witness that never restarts
+
+The harness parses the scenario markers, drives the resource lifecycle
+(stop -> start -> restart) through the server console, requires every §32
+scenario plus the §33 stale-generation regression to report PASS, fails on
+any stale-delivery marker, and adds the two harness-side scenarios (module
+unload at graceful shutdown, shutdown with active workers).
 
 The pinned build identity lives in PINNED below and is recorded (with the
 download checksum) into install.json after a successful install. Server
@@ -21,10 +36,12 @@ a fresh temp directory per test run (cleaned up afterwards).
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import ctypes
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -70,11 +87,72 @@ SEVENZIP = {
 SEVENZIP_DIR = SERVER_DIR / "tools" / "7zip"
 
 TEST_RESOURCE_NAME = "sdkintegration"
+WITNESS_RESOURCE_NAME = "sdkintegration2"
+INTEGRATION_DIR = PROJECT_ROOT / "other" / "tests" / "integration"
+MAIN_LUA_PATH = INTEGRATION_DIR / "main_resource.lua"
+WITNESS_LUA_PATH = INTEGRATION_DIR / "witness_resource.lua"
 INTEGRATION_TIMEOUT = 180.0
 
 MARK = "INTEGRATION:"
 MARK_RESULT = "INTEGRATION_RESULT:"
-STALE_MARKER = "STALE_TASK_DELIVERED"
+
+# Generational choreography markers printed by the Lua suite (one each):
+#   STOP_NOW      generation 1 is done -> harness stops + starts the resource
+#                 (the dedicated §32 resource stop/start cycle)
+#   RESTART_NOW   generation 2 is done -> harness restarts the resource
+#                 (console restart; §33 regression cycle)
+#   RUN_COMPLETE  generation 3 is done -> harness performs the graceful
+#                 shutdown (with an active worker still pending)
+MARK_STOP_NOW = "STOP_NOW"
+MARK_RESTART_NOW = "RESTART_NOW"
+MARK_RUN_COMPLETE = "RUN_COMPLETE"
+
+# Negative markers: if ANY of these appears anywhere in the console log, the
+# run fails -- stale generation-1/2 deliveries, a delivery into the fresh
+# VM's first-callback registry slot, or a task that fired during shutdown.
+NEGATIVE_MARKERS = (
+    "STALE_TASK_DELIVERED",
+    "OLD_CALLBACK_FIRED",
+    "STALE_COLLISION_FIRED",
+    "SHOULD_NEVER_FIRE",
+)
+
+# Every §32 scenario plus the automatic §33 regression (plan §32/§33). Each
+# of these must be reported with its own "SCENARIO <name>: PASS" marker and
+# never with FAIL; "module unload" and "shutdown with active workers" are
+# judged by the harness itself (their observable moment is the shutdown).
+REQUIRED_SCENARIOS = (
+    "module load",
+    "module unload",
+    "resource start",
+    "resource stop",
+    "resource restart",
+    "function registration",
+    "argument validation",
+    "return values",
+    "callback",
+    "timer",
+    "async task",
+    "async completion",
+    "userdata",
+    "userdata invalidation",
+    "multiple resources",
+    "old callback after restart",
+    "old async task after restart",
+    "multiple timers after restart",
+    "shutdown with active workers",
+    "stale generation regression (33)",
+)
+
+SCENARIO_RE = re.compile(r"SCENARIO (.+?): (PASS|FAIL)")
+
+# Delay between the `stop` and `start` console commands of the §32 cycle.
+# MTA processes console commands in order, so the start always executes
+# after the stop completes regardless of timing.
+STOP_TO_START_DELAY = 2.0
+# Settle time after RUN_COMPLETE before the graceful shutdown: late stale
+# deliveries (if the module regressed) would still be visible.
+SHUTDOWN_SETTLE = 2.0
 
 # Scancodes for the console keys the harness must inject (MTA reads the
 # console input buffer, not stdin, so commands are typed as key events).
@@ -256,108 +334,48 @@ def require_install() -> dict:
     return json.loads(INSTALL_JSON.read_text(encoding="utf-8"))
 
 
-# --- integration test ------------------------------------------------------------
+# --- integration test ---------------------------------------------------------
 
-META_XML = f"""<meta>
-    <info author="MTA Module SDK" name="{TEST_RESOURCE_NAME}" type="script" version="1.0.0"/>
-    <script src="main.lua" type="server"/>
-</meta>
-"""
 
-# Integration scenarios (plan §32/§33). Generation 1 runs the function-level
-# scenarios, prints the result, leaves a marker file and a 10-second stale
-# task, then asks the harness (RESTART_NOW) to restart the resource. The
-# restarted generation must never receive the stale task's completion; it
-# waits past the stale window and prints the second result.
-MAIN_LUA = r"""
-local MARK = "INTEGRATION:"
-local failures = {}
-local isGeneration2 = fileExists("sdk_gen1_was_here.txt")
+@dataclasses.dataclass
+class RunResult:
+    """Everything the harness learned from one server run."""
 
-local function check(name, condition)
-    if condition then
-        outputServerLog(MARK .. " " .. name .. ": OK")
-    else
-        failures[#failures + 1] = name
-        outputServerLog(MARK .. " " .. name .. ": FAILED")
-    end
-end
+    tail: list[str] = dataclasses.field(default_factory=list)
+    # scenario name -> list of verdicts (True = PASS)
+    scenarios: dict[str, list[bool]] = dataclasses.field(default_factory=dict)
+    negative: list[str] = dataclasses.field(default_factory=list)
+    results: list[bool] = dataclasses.field(default_factory=list)
+    failed: bool = False
+    failure_reason: str = ""
+    run_complete: bool = False
+    graceful: bool = False
+    returncode: int | None = None
 
-if isGeneration2 then
-    fileDelete("sdk_gen1_was_here.txt")
-    -- plan §33: the generation-1 task (10s) must never deliver here; the
-    -- harness asserts the absence of STALE_TASK_DELIVERED in the log.
-    outputServerLog(MARK .. " generation 2 start")
-    -- shutdown with active workers (plan §32): a 60s task is still queued
-    -- when the harness stops the server; the module must cancel it cleanly
-    -- and never let it fire.
-    sample_task_run(60000, 0, 0, function()
-        outputServerLog("SHOULD_NEVER_FIRE")
-    end)
-    setTimer(function()
-        if #failures == 0 then
-            outputServerLog("INTEGRATION_RESULT: PASS")
-        else
-            outputServerLog("INTEGRATION_RESULT: FAIL (" .. table.concat(failures, ", ") .. ")")
-        end
-    end, 11000, 1)
-    return
-end
 
--- --- generation 1 ------------------------------------------------------------
+def resource_meta(resource_name: str) -> str:
+    return (
+        "<meta>\n"
+        f'    <info author="MTA Module SDK" name="{resource_name}" type="script" version="1.0.0"/>\n'
+        '    <script src="main.lua" type="server"/>\n'
+        "</meta>\n"
+    )
 
-check("module load", type(sample_add) == "function" and type(counter_create) == "function")
-check("function registration", type(sample_task_run) == "function" and type(sample_timer) == "function")
-check("return values", sample_add(2, 3) == 5 and sample_greet("Bob") == "hello, Bob")
-check("argument validation", select(1, pcall(sample_add, "x", {})) == false)
 
-local counter = counter_create(7)
-check("userdata", counter ~= nil and counter:get() == 7 and counter:add(3) == 10)
-check("userdata validation", select(1, pcall(counter.set, counter, {})) == false)
-
-local timerFired = 0
-sample_timer(50, 2, function() timerFired = timerFired + 1 end)
-
-local taskResult = nil
-sample_task_run(100, 10, 20, function(sum) taskResult = sum end)
-local staleTask = sample_task_run(10000, 0, 0, function()
-    outputServerLog("STALE_TASK_DELIVERED")
-end)
-check("async task valid", staleTask > 0)
-
-local callbackValue = nil
-sample_async_add(1, 2, function(sum) callbackValue = sum end)
-
-setTimer(function()
-    check("timer", timerFired >= 2)
-    check("callback", callbackValue == 3)
-    check("async completion", taskResult == 30)
-
-    if #failures == 0 then
-        outputServerLog("INTEGRATION_RESULT: PASS")
-    else
-        outputServerLog("INTEGRATION_RESULT: FAIL (" .. table.concat(failures, ", ") .. ")")
-    end
-
-    -- arm the §33 restart scenario: the marker file marks THIS generation as
-    -- done; the 10s task must never deliver after the harness restart.
-    local handle = fileCreate("sdk_gen1_was_here.txt")
-    if handle then
-        fileWrite(handle, "generation 1 was here")
-        fileClose(handle)
-    end
-    sample_task_run(10000, 0, 0, function()
-        outputServerLog("STALE_TASK_DELIVERED")
-    end)
-    outputServerLog(MARK .. " RESTART_NOW")
-end, 800, 1)
-"""
+def read_integration_script(path: Path) -> str:
+    if not path.is_file():
+        die(
+            f"integration script missing: {path} "
+            f"(the integration test suite lives in {INTEGRATION_DIR})"
+        )
+    return path.read_text(encoding="utf-8")
 
 
 def cmd_test(args) -> int:
     info = require_install()
     config = load_config()
-    module_name = config["module"]["name"]
+    main_lua = read_integration_script(MAIN_LUA_PATH)
+    witness_lua = read_integration_script(WITNESS_LUA_PATH)
 
     out("Building the module ...")
     build = subprocess.run(
@@ -389,10 +407,15 @@ def cmd_test(args) -> int:
 
     resources_dir = mods / "resources"
     resources_dir.mkdir(exist_ok=True)
-    resource_dir = resources_dir / TEST_RESOURCE_NAME
-    resource_dir.mkdir()
-    (resource_dir / "meta.xml").write_text(META_XML, encoding="utf-8")
-    (resource_dir / "main.lua").write_text(MAIN_LUA, encoding="utf-8")
+    for resource_name, script in (
+        (TEST_RESOURCE_NAME, main_lua),
+        (WITNESS_RESOURCE_NAME, witness_lua),
+    ):
+        resource_dir = resources_dir / resource_name
+        resource_dir.mkdir()
+        (resource_dir / "meta.xml").write_text(resource_meta(resource_name), encoding="utf-8")
+        (resource_dir / "main.lua").write_text(script, encoding="utf-8")
+    out(f"Test resources installed: {TEST_RESOURCE_NAME}, {WITNESS_RESOURCE_NAME}")
 
     # Unique ports per run so parallel runs never collide. The Windows server
     # reads the config from the SERVER ROOT (next to the exe); the Linux one
@@ -407,17 +430,19 @@ def cmd_test(args) -> int:
             "    <maxplayers>4</maxplayers>",
             f'    <module src="{binary.name}"></module>',
             f'    <resource src="{TEST_RESOURCE_NAME}" startup="1"/>',
+            f'    <resource src="{WITNESS_RESOURCE_NAME}" startup="1"/>',
             "</config>",
         ]
     )
     (mods / "mtaserver.conf").write_text(conf_text, encoding="utf-8")
     (server_root / "mtaserver.conf").write_text(conf_text, encoding="utf-8")
 
-    out("Starting the server (temp directory) ...")
+    log_copy = LOGS_DIR / time.strftime("%Y%m%d-%H%M%S")
+    result: RunResult | None = None
     try:
-        exit_code = run_server(info, server_root)
+        out("Starting the server (temp directory) ...")
+        result = run_server(info, server_root)
     finally:
-        log_copy = LOGS_DIR / time.strftime("%Y%m%d-%H%M%S")
         log_copy.mkdir(parents=True, exist_ok=True)
         # The pinned server runs without a configured log file; the console
         # scrollback IS the run log.
@@ -426,10 +451,12 @@ def cmd_test(args) -> int:
         out(f"Log kept at: {console_log}")
         shutil.rmtree(temp_root, ignore_errors=True)
         out("Temporary server directory cleaned up")
-    return exit_code
+    if result is None:
+        return 1
+    return finalize_run(result, console_log)
 
 
-def run_server(info: dict, server_root: Path) -> int:
+def run_server(info: dict, server_root: Path) -> RunResult:
     # The Windows MTA server requires a real console for both output and
     # input: its startup verifies the stdout handle with
     # GetConsoleScreenBufferInfo and quits otherwise, and it reads commands
@@ -466,10 +493,15 @@ def run_server(info: dict, server_root: Path) -> int:
     if os.name == "nt":
         kernel32.CloseHandle(stdin_handle)
         kernel32.CloseHandle(stdout_handle)
+    result: RunResult | None = None
     try:
-        return wait_for_results(process)
+        result = wait_for_results(process)
+        return result
     finally:
-        stop_process(process)
+        graceful, returncode = stop_process(process)
+        if result is not None:
+            result.graceful = graceful
+            result.returncode = returncode
 
 
 def ensure_console() -> None:
@@ -592,59 +624,185 @@ def inject_console_text(text: str) -> None:
         out(f"Key injection incomplete (ok={ok}, written={written.value})")
 
 
-def wait_for_results(process) -> int:
+def wait_for_results(process) -> RunResult:
+    """Runs the §32/§33 choreography against the live server console.
+
+    Generation markers emitted by the Lua suite drive the harness: STOP_NOW
+    -> `stop` + `start` (dedicated resource stop/start cycle), RESTART_NOW ->
+    `restart` (the §33 regression cycle), RUN_COMPLETE -> graceful shutdown
+    follows in stop_process. Every scenario marker and every stale-delivery
+    marker in the console log is collected into the result.
+    """
     deadline = time.time() + INTEGRATION_TIMEOUT
-    restart_sent = False
-    results: list[bool] = []
-    tail: list[str] = []
-    stale_seen = False
+    result = RunResult()
+    phase = "gen1"  # gen1 -> stopping -> gen2 -> gen3 -> done
+    stop_sent_at: float | None = None
+    done_at: float | None = None
 
     while time.time() < deadline:
         # The server shares our console; its whole output history is in the
         # console buffer. Consume only the lines appended since last poll.
         lines = console_buffer_lines()
-        for line in lines[len(tail) :]:
-            tail.append(line)
-            if STALE_MARKER in line:
-                stale_seen = True
-                out(f"!! {line}")
-            if "RESTART_NOW" in line and not restart_sent:
-                restart_sent = True
-                out("Restarting the resource (plan §33 stale-generation scenario) ...")
-                inject_console_text(f"restart {TEST_RESOURCE_NAME}\r")
+        for line in lines[len(result.tail):]:
+            result.tail.append(line)
+            for marker in NEGATIVE_MARKERS:
+                if marker in line and marker not in result.negative:
+                    result.negative.append(marker)
+                    out(f"!! {line}")
+            for name, verdict in SCENARIO_RE.findall(line):
+                result.scenarios.setdefault(name.strip(), []).append(verdict == "PASS")
             if MARK_RESULT in line:
                 passed = "PASS" in line
-                results.append(passed)
+                result.results.append(passed)
                 out(line)
                 if not passed:
-                    dump_tail(tail)
-                    return 1
-                # generation 2 prints the final result; require both results
-                if len(results) == 2:
-                    report_scenarios(tail)
-                    if stale_seen:
-                        out("FAILED: a stale generation-1 task delivered after the restart")
-                        return 1
-                    for late in tail:
-                        if "SHOULD_NEVER_FIRE" in late:
-                            out("FAILED: a task fired during shutdown")
-                            return 1
-                    out("All integration scenarios passed (2 generations, stale task dropped, clean shutdown)")
-                    return 0
+                    result.failed = True
+                    result.failure_reason = "a generation reported INTEGRATION_RESULT: FAIL"
+                    dump_tail(result.tail)
+                    return result
+            if phase == "gen1" and MARK_STOP_NOW in line:
+                phase = "stopping"
+                stop_sent_at = time.time()
+                out("Generation 1 done; stopping the resource (resource stop/start cycle, plan §32) ...")
+                inject_console_text(f"stop {TEST_RESOURCE_NAME}\r")
+            if phase == "gen2" and MARK_RESTART_NOW in line:
+                phase = "gen3"
+                out("Generation 2 done; restarting the resource (plan §33 regression cycle) ...")
+                inject_console_text(f"restart {TEST_RESOURCE_NAME}\r")
+            if phase == "gen3" and MARK_RUN_COMPLETE in line:
+                phase = "done"
+                done_at = time.time()
+
+        if result.negative:
+            result.failed = True
+            result.failure_reason = "stale delivery marker(s) appeared: " + ", ".join(result.negative)
+            dump_tail(result.tail)
+            return result
+
+        # The stop->start transition of the §32 cycle. Console commands are
+        # processed in order, so this start always follows the completed stop.
+        if (
+            phase == "stopping"
+            and stop_sent_at is not None
+            and time.time() - stop_sent_at >= STOP_TO_START_DELAY
+        ):
+            out("Starting the resource again ...")
+            inject_console_text(f"start {TEST_RESOURCE_NAME}\r")
+            phase = "gen2"
+
+        if phase == "done" and done_at is not None and time.time() - done_at >= SHUTDOWN_SETTLE:
+            result.run_complete = True
+            break
+
         if process.poll() is not None:
+            result.failed = True
+            result.failure_reason = "the server exited before the integration run completed"
             out("The server exited before the integration result; console tail:")
-            dump_tail(tail)
-            return 1
+            dump_tail(result.tail)
+            return result
         time.sleep(0.2)
+    else:
+        result.failed = True
+        result.failure_reason = "timed out waiting for the integration run to complete"
+        out("Timed out waiting for the integration results; console tail:")
+        dump_tail(result.tail)
+    return result
 
-    out("Timed out waiting for the integration results; console tail:")
-    dump_tail(tail)
+
+def evaluate_shutdown_scenarios(result: RunResult) -> list[tuple[str, bool, str]]:
+    """Judges the two scenarios whose observable moment is the shutdown.
+
+    module unload                 the module is unloaded exactly once, at
+                                  ShutdownModule during a graceful console
+                                  shutdown (a crash or forced kill fails)
+    shutdown with active workers  a 60 s task was still pending when the
+                                  server shut down and never delivered
+    """
+    stopped_line = any("Server stopped!" in line for line in result.tail)
+    worker_armed = any("shutdown worker armed" in line for line in result.tail)
+    late_delivery = any("SHOULD_NEVER_FIRE" in line for line in result.tail)
+
+    module_unload_ok = result.graceful and stopped_line
+    shutdown_ok = result.graceful and worker_armed and not late_delivery
+    return [
+        (
+            "module unload",
+            module_unload_ok,
+            f"graceful console shutdown with the module loaded; returncode={result.returncode}",
+        ),
+        (
+            "shutdown with active workers",
+            shutdown_ok,
+            "a 60 s worker was still pending at the graceful shutdown, "
+            + ("no late delivery marker" if not late_delivery else "a late delivery marker appeared"),
+        ),
+    ]
+
+
+def finalize_run(result: RunResult, console_log: Path) -> int:
+    """Validates one finished run: scenario coverage, stale markers, shutdown."""
+    # Pick up everything printed between the last poll and the shutdown
+    # (the graceful-stop output is part of the evidence).
+    tail = console_buffer_lines()
+    result.tail.extend(tail[len(result.tail):])
+
+    ok = not result.failed and result.run_complete
+
+    # Negative markers anywhere in the log fail the run (plan §14/§15/§33:
+    # stale objects must never deliver into a fresh generation).
+    for line in result.tail:
+        for marker in NEGATIVE_MARKERS:
+            if marker in line and marker not in result.negative:
+                result.negative.append(marker)
+    for marker in result.negative:
+        ok = False
+        out(f"FAILED: a stale/shutdown delivery marker appeared in the log: {marker}")
+
+    # The two harness-side scenarios (their observable moment is the
+    # shutdown, so only the harness can report them) are appended to the log
+    # to keep it self-contained.
+    for name, passed, detail in evaluate_shutdown_scenarios(result):
+        result.scenarios.setdefault(name, []).append(passed)
+        line = f"SCENARIO {name}: {'PASS' if passed else 'FAIL'} ({detail})"
+        out(MARK + " " + line)
+        with console_log.open("a", encoding="utf-8") as sink:
+            sink.write("\n" + line + "\n")
+
+    missing = [name for name in REQUIRED_SCENARIOS if not result.scenarios.get(name)]
+    failed_scenarios = sorted(name for name, verdicts in result.scenarios.items() if not all(verdicts))
+    if ok and missing:
+        ok = False
+        out("FAILED: scenarios without a PASS marker: " + ", ".join(missing))
+    if ok and failed_scenarios:
+        ok = False
+        out("FAILED: scenarios reported FAIL: " + ", ".join(failed_scenarios))
+    if ok and not all(result.results):
+        ok = False
+        out("FAILED: an INTEGRATION_RESULT reported FAIL")
+
+    out("Scenarios covered (§32 + §33):")
+    for name in REQUIRED_SCENARIOS:
+        verdicts = result.scenarios.get(name, [])
+        if verdicts and all(verdicts):
+            status = "PASS"
+        elif verdicts:
+            status = "FAIL"
+        else:
+            status = "MISSING"
+        extra = f" ({len(verdicts)} reports)" if len(verdicts) > 1 else ""
+        out(f"  - {name}: {status}{extra}")
+    for name in sorted(set(result.scenarios) - set(REQUIRED_SCENARIOS)):
+        status = "PASS" if all(result.scenarios[name]) else "FAIL"
+        out(f"  - {name} (extra): {status}")
+
+    if ok:
+        out(
+            "All integration scenarios passed (19 §32 scenarios + §33 regression; "
+            "stale generations isolated, clean shutdown with active workers)"
+        )
+        return 0
+    out(f"Integration run FAILED: {result.failure_reason or 'see the messages above'}")
     return 1
-
-
-def dump_console() -> None:
-    for line in console_buffer_lines()[-25:]:
-        out("  | " + line)
 
 
 def dump_tail(tail: list[str]) -> None:
@@ -652,30 +810,30 @@ def dump_tail(tail: list[str]) -> None:
         out("  " + line)
 
 
-def report_scenarios(tail: list[str]) -> None:
-    out("Scenarios covered:")
-    for line in tail:
-        if line.startswith(MARK) and "RESTART_NOW" not in line and "generation" not in line:
-            out("  - " + line[len(MARK) :].strip())
-
-
-def stop_process(process) -> None:
+def stop_process(process) -> tuple[bool, int | None]:
     """Graceful stop first: console commands let MTA shut down cleanly (the
-    module's ShutdownModule runs), then force-kill after a grace period."""
+    module's ShutdownModule runs), then force-kill after a grace period.
+
+    Returns (graceful, returncode); graceful is False when a kill was needed.
+    """
+    graceful = False
     try:
         if process.poll() is None:
             inject_console_text("exit\r")
+            # A shutdown worker may still be running: the SDK joins active
+            # workers in ShutdownModule (plan §13 "safe shutdown"), so the
+            # graceful window must outlast the 60 s scenario worker.
             try:
-                process.wait(timeout=8)
+                process.wait(timeout=120)
                 out("Server shut down gracefully (console exit)")
-                return
+                return True, process.returncode
             except subprocess.TimeoutExpired:
                 pass
             inject_console_text("q")
             try:
                 process.wait(timeout=20)
                 out("Server shut down gracefully (console Q)")
-                return
+                return True, process.returncode
             except subprocess.TimeoutExpired:
                 pass
             if os.name == "nt":
@@ -688,6 +846,7 @@ def stop_process(process) -> None:
             pass
     except Exception:
         pass
+    return graceful, process.returncode
 
 
 # --- entry ------------------------------------------------------------------

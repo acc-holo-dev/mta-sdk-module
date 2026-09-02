@@ -118,10 +118,18 @@ On every resource start the module replays the registry into that VM via
 name** (no auto-namespacing; a regression script pins `crypto.sha256`
 verbatim).
 
-Lambda-style registrations derive a `Signature` (arguments, returns,
-variadic) from the C++ signature; body-style ones record `derived == false`
-and say so explicitly (plan §9). `mta docs` dumps this metadata without
-needing a Lua VM.
+Lambda-style registrations derive a `Signature` (arguments with types and
+optional markers, returns, variadic, capability flags) from the C++
+signature; the flags (`variadic`, `callback`) land in `Spec::flags` through
+the registration bridge. Body-style registrations record `derived == false`
+and say so explicitly (plan §9). Underivable metadata is marked explicitly
+wherever the metadata is rendered (plan §10): the category stays empty (no
+registration spelling provides one yet → `n/a` in the docs), and per-function
+error lists are not part of the signature metadata at all. `mta docs` dumps
+the function metadata without a module manager; object methods
+(`MTA_METHOD`, registered lazily per VM) are listed through the recorded
+`MethodInfo` metadata after the docgen materializes the declared
+`MTA_OBJECT` types in a scratch VM.
 
 ### 3.3 `source/sdk/lua/` + `sdk/bind/` — values and the typed binder
 
@@ -137,9 +145,14 @@ needing a Lua VM.
 * `bind/bind.hpp` — the typed binder: reads parameters from the stack
   (`args<double, double>(L)` and lambda parameters), synthesizes
   `optional`/`rest_args`/defaults, applies `context`, pushes results
-  (scalars, tuples, vectors, `optional`, `Arguments`).
+  (scalars, tuples, vectors, `optional`, `Arguments`) and integrates native
+  types: a `mta::Resource` parameter is resolved by name and validated live
+  through the module manager, a returned `Resource` is pushed as its name
+  (plan §6/§17).
 * `objects/userdata.hpp` — `Registry<T>` + `MTA_OBJECT`/`MTA_METHOD`
-  (stable, module-aware metatable identities, `__gc` destructor).
+  (stable, module-aware metatable identities, `__gc` destructor); every
+  method call records its `MethodInfo` metadata and `MTA_OBJECT`-named types
+  list themselves in `mta::userdata::object_types()` for the docs generator.
 * `events/events.hpp` — `mta::events::trigger` (module → Lua events).
 
 ### 3.4 `source/sdk/runtime/` + `resources/` + `native/` + `logging/` — the engine
@@ -161,7 +174,10 @@ needing a Lua VM.
   shutdown).
 * `native/resource` — `mta::Resource`, the safe subset of native types
   (live ABI lookup; no element API exists behind the module ABI —
-  documented).
+  documented) and the Lua-boundary hooks for the binder: a `Resource`
+  argument is validated by name on every call, a returned `Resource` is
+  pushed as its name (`push_one`, found via argument-dependent lookup, so
+  the native layer stays below the Lua layer).
 * `logging/logging` — leveled logging to the server console, stdout
   fallback in the harness.
 

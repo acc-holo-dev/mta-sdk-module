@@ -44,6 +44,14 @@ Timer every(lua_State *lua_vm, int delay_ms, std::function<void()> fn)
                     [fn = std::move(fn)](std::uint64_t) { fn(); });
 }
 
+Timer every(lua_State *lua_vm, int delay_ms, std::int64_t repeat_count,
+            std::function<void(std::uint64_t tick)> fn)
+{
+    // The scheduler treats a repeat count <= 0 as "until cancelled".
+    return schedule(lua_vm, checked_delay(delay_ms), static_cast<int>(repeat_count),
+                    std::move(fn));
+}
+
 bool Timer::cancel() noexcept
 {
     if (state_ == nullptr || state_->cancelled || state_->finished)

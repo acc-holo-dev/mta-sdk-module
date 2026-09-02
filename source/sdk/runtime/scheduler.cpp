@@ -2,6 +2,7 @@
 
 #include "sdk/abi/module.hpp"
 #include "sdk/logging/logging.hpp"
+#include "sdk/lua/protect.hpp"
 #include "sdk/resources/resources.hpp"
 
 #include <algorithm>
@@ -70,6 +71,9 @@ struct Completion
     std::function<void(const mta::lua::Arguments &, const char *)> completion;
     std::string resource;
     std::uint64_t generation = 0;
+    // The async task the completion belongs to (0 = unattributed); part of
+    // the automatic log-message context (plan §20).
+    std::uint64_t task_id = 0;
 };
 
 struct Timer
@@ -177,6 +181,12 @@ void Scheduler::worker_loop()
         Completion completion;
         completion.resource = job.resource;
         completion.generation = job.generation;
+        completion.task_id = job.state->id;
+        // Attribute log messages emitted by the background work to the
+        // owning resource and task (plan §20); the context is per-thread, so
+        // a worker thread gets its own.
+        mta::lua::detail::ScopedDiagnosticContext scope{nullptr, job.state->id, 0};
+        scope.set_resource(job.resource);
         try
         {
             completion.results = job.work();
@@ -275,6 +285,10 @@ void Scheduler::pump()
             }
         }
 
+        // Attribute the delivery (and its log output) to the owning
+        // resource and task (plan §20).
+        mta::lua::detail::ScopedDiagnosticContext scope{nullptr, entry.task_id, 0};
+        scope.set_resource(entry.resource);
         try
         {
             entry.completion(entry.results, entry.error.empty() ? nullptr : entry.error.c_str());
@@ -326,6 +340,10 @@ void Scheduler::pump()
     for (auto &timer : due)
     {
         ++timer.fired;
+        // Attribute the dispatch (and its log output) to the firing timer
+        // and its resource (plan §20).
+        mta::lua::detail::ScopedDiagnosticContext scope{nullptr, 0, timer.id};
+        scope.set_resource(timer.resource);
         try
         {
             timer.completion(timer.fired);
@@ -337,6 +355,15 @@ void Scheduler::pump()
         catch (...)
         {
             mta::log::error("timer callback failed: unknown C++ exception");
+        }
+
+        // The handle may have been cancelled from inside this very callback:
+        // the scheduler-side erase cannot find a timer that is being
+        // dispatched from the local snapshot, so drop it here -- cancel()
+        // must mean the completion never fires again (plan §15).
+        if (timer.state != nullptr && timer.state->cancelled)
+        {
+            continue;
         }
 
         if (timer.repeats_left > 0 && --timer.repeats_left == 0)

@@ -6,10 +6,10 @@ Commands:
     mta new function <name>    minimal compile-ready function (name verbatim)
     mta new object <name>      skeleton native object (stable MTA_OBJECT id)
     mta build [--preset P]     configure + build via CMake presets
-    mta test [unit|lua|integration]
+    mta test [unit|lua|integration]   all = unit + lua + integration suites
     mta docs [--output FILE]   registry documentation from signature metadata
     mta doctor                 real environment checks
-    mta package                copy the built module into dist/
+    mta package [--release-name]  copy the built module into dist/
     mta server <install|update|version|start|stop>  (delegates to other/server)
 
 Only the Python standard library is used (tomllib on 3.11+).
@@ -34,6 +34,11 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
 
 SELF = Path(__file__).resolve()
 SDK_ROOT = SELF.parents[3]  # other/tools/mta/cli.py -> the SDK checkout root
+
+# NOTE: there is no SDK version constant here. The SDK version and the module
+# ABI version (plan §38) are read from source/sdk/version.hpp -- the single
+# source of truth shared with the C++ SDK and CMake's project(VERSION). See
+# read_sdk_version_header() below.
 
 OK, WARN, FAIL = "OK", "WARN", "FAIL"
 
@@ -351,6 +356,42 @@ def cmd_build(args: argparse.Namespace) -> int:
 # --- mta test ---------------------------------------------------------------------
 
 
+def run_ctest(root: Path, preset: str, regex: str | None) -> int:
+    cmd = ["ctest", "--preset", preset, "--output-on-failure"]
+    if regex:
+        cmd += ["-R", regex]
+    return run_tool(cmd, root, capture=False).returncode
+
+
+def run_integration(root: Path) -> int:
+    server_script = root / "other" / "server" / "mta_server.py"
+    return run_tool([sys.executable, str(server_script), "test"], root, capture=False).returncode
+
+
+def integration_ready(root: Path) -> tuple[bool, str]:
+    """Whether the real-server integration suite can run in this environment.
+
+    The pinned server (other/server/) only runs on the platform recorded in
+    install.json; elsewhere the suite is reported NOT RUN (plan §28/§29
+    example: "integration NOT RUN"), which must not fail the `all` run.
+    """
+    if not (root / "other" / "server" / "mta_server.py").is_file():
+        return False, "the server harness is not installed"
+    install_json = root / "other" / "server" / "install.json"
+    if not install_json.is_file():
+        return False, "the pinned server is not installed (`mta server install`)"
+    try:
+        import json
+
+        server_platform = str(json.loads(install_json.read_text(encoding="utf-8")).get("platform", "")).lower()
+    except Exception:  # noqa: BLE001
+        return False, "other/server/install.json is not valid JSON"
+    host = "windows" if py_platform.system() == "Windows" else "linux"
+    if server_platform != host:
+        return False, f"the installed server is {server_platform}-only (this is {host})"
+    return True, f"{server_platform} server installed"
+
+
 def cmd_test(args: argparse.Namespace) -> int:
     root = Path.cwd().resolve()
     load_config(root)
@@ -358,25 +399,45 @@ def cmd_test(args: argparse.Namespace) -> int:
     what = args.suite
 
     if what == "integration":
-        server_script = root / "other" / "server" / "mta_server.py"
-        if not server_script.is_file():
+        # Explicit integration keeps its dedicated, blocking behavior: it is
+        # the caller's responsibility to install the server first (CI does).
+        if not (root / "other" / "server" / "mta_server.py").is_file():
             out("integration: NOT AVAILABLE -- the server harness is not installed")
             out("  (see other/server/; `mta server install` once it exists)")
             return 1
-        return run_tool([sys.executable, str(server_script), "test"], root, capture=False).returncode
+        return run_integration(root)
 
-    if what == "unit":
-        regex = "module_config"
-    elif what == "lua":
-        regex = "sdk_tests"
-    else:
-        regex = None
+    if what in ("unit", "lua"):
+        # unit -> module_config ctest tests, lua -> sdk_tests (CI calls both).
+        return run_ctest(root, preset, "module_config" if what == "unit" else "sdk_tests")
 
-    cmd = ["ctest", "--preset", preset, "--output-on-failure"]
-    if regex:
-        cmd += ["-R", regex]
-    result = run_tool(cmd, root, capture=False)
-    return result.returncode
+    # suite == "all" (plan §29): unit + lua + integration with explicit
+    # per-suite sections. An environment that cannot run the integration
+    # (harness missing, pinned server not installed or foreign platform)
+    # skips it as NOT RUN instead of failing the whole run.
+    failed: list[str] = []
+    out("== unit ==")
+    if run_ctest(root, preset, "module_config") != 0:
+        failed.append("unit")
+    out("")
+    out("== lua ==")
+    if run_ctest(root, preset, "sdk_tests") != 0:
+        failed.append("lua")
+
+    out("")
+    out("== integration ==")
+    ready, why = integration_ready(root)
+    if not ready:
+        out(f"integration: NOT RUN ({why})")
+    elif run_integration(root) != 0:
+        failed.append("integration")
+
+    out("")
+    if failed:
+        out("FAILED suites: " + ", ".join(failed))
+        return 1
+    out("All test suites passed" + ("" if ready else " (integration NOT RUN)"))
+    return 0
 
 
 # --- mta docs ----------------------------------------------------------------------
@@ -420,6 +481,65 @@ def check(name: str, status: str, detail: str = "") -> tuple[str, str, str]:
     return name, status, detail
 
 
+def normalize_arch(machine: str) -> str:
+    """CMake-style arch tag, matching cmake/core/platform.cmake (x86_64|amd64 -> x64)."""
+    lowered = machine.strip().lower()
+    if lowered.startswith(("x86_64", "amd64")) or lowered == "x64":
+        return "x64"
+    if lowered.startswith(("i386", "i686")) or lowered == "x86":
+        return "x86"
+    if lowered.startswith(("aarch64", "arm64")):
+        return "arm64"
+    return lowered or machine.strip()
+
+
+def probe_architecture(root: Path) -> tuple[str | None, str]:
+    """Target architecture of the toolchain (plan §28 "Architecture").
+
+    Probes the compiler itself -- not the installed MTA server -- the same
+    way the build tags its output (cmake/core/platform.cmake). Returns
+    (architecture like "x64", detail) or (None, reason).
+    """
+    gpp = which("g++", root)
+    if gpp:
+        result = run_tool([gpp, "-dumpmachine"], root)
+        machine = (result.stdout or "").strip()
+        if result.returncode == 0 and machine:
+            return normalize_arch(machine), f"g++ -dumpmachine: {machine}"
+    cl = which("cl", root)
+    if cl:
+        # cl has no -dumpmachine; the MSVC dev environment (msvc-dev-cmd in
+        # CI) exports the target architecture.
+        target = os.environ.get("VSCMD_ARG_TGT_ARCH", "").strip()
+        if target:
+            return normalize_arch(target), f"cl (VSCMD_ARG_TGT_ARCH={target})"
+        return None, "could not probe the cl target (VSCMD_ARG_TGT_ARCH is not set)"
+    if gpp:
+        return None, "could not probe the g++ target (-dumpmachine failed)"
+    return None, "could not probe the compiler target (no compiler found)"
+
+
+def read_sdk_version_header(root: Path | None = None) -> dict[str, str]:
+    """The SDK version facts (plan §38) from source/sdk/version.hpp.
+
+    That header is the single source of truth for the SDK version and the
+    MTA module ABI version: the C++ SDK includes it, CMake parses it for
+    project(VERSION) and this CLI parses it for `mta doctor` -- the values
+    are never duplicated as literals. Returns only the macros that were
+    found and well-formed, e.g. {"SDK_VERSION": "1.0.0",
+    "SDK_ABI_VERSION": "1"}; an empty dict when the header is missing.
+    """
+    header = (root or SDK_ROOT) / "source" / "sdk" / "version.hpp"
+    facts: dict[str, str] = {}
+    if header.is_file():
+        text = header.read_text(encoding="utf-8")
+        for macro in ("SDK_VERSION", "SDK_ABI_VERSION"):
+            match = re.search(rf'^\s*#define\s+{macro}\s+"([^"]+)"', text, re.MULTILINE)
+            if match:
+                facts[macro] = match.group(1)
+    return facts
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     root = Path.cwd().resolve()
     findings: list[tuple[str, str, str]] = []
@@ -444,6 +564,29 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         except SystemExit:
             findings.append(check("Project", FAIL, "config/module.toml is invalid"))
             config = None
+
+    # SDK version + module ABI version (plan §38) ---------------------------------
+    # Parsed from source/sdk/version.hpp -- the header the C++ SDK includes
+    # and CMake's project(VERSION) follows -- so doctor reports the same
+    # facts the build compiles in. They are separate entities from the
+    # Module version (the Project line above) and the MTA server version
+    # (the MTA server line below).
+    sdk_facts = read_sdk_version_header(SDK_ROOT)
+    sdk_version = sdk_facts.get("SDK_VERSION", "")
+    abi_version = sdk_facts.get("SDK_ABI_VERSION", "")
+    sdk_version_ok = re.fullmatch(r"\d+\.\d+\.\d+", sdk_version) is not None
+    findings.append(check(
+        "SDK version",
+        OK if sdk_version_ok else FAIL,
+        f"sdk {sdk_version or '?'} (source/sdk/version.hpp)"
+        + ("" if sdk_version_ok else " -- SDK_VERSION missing or not X.Y.Z"),
+    ))
+    findings.append(check(
+        "ABI version",
+        OK if abi_version else FAIL,
+        f"module-abi {abi_version or '?'} (source/sdk/version.hpp)"
+        + ("" if abi_version else " -- SDK_ABI_VERSION missing"),
+    ))
 
     # SDK headers + Lua ABI ------------------------------------------------------
     lua_src = SDK_ROOT / "other" / "third_party" / "lua" / "src"
@@ -485,6 +628,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     elif which("cl", root):
         _, compiler_ver = probe_version("cl", [], root)
     findings.append(check("Compiler", OK if compiler_loc else FAIL, compiler_ver or "not found"))
+
+    # Architecture: the toolchain's target, not the installed server's
+    # (plan §28 lists it next to the compiler).
+    arch, arch_detail = probe_architecture(root)
+    if compiler_loc is None:
+        findings.append(check("Architecture", WARN, "unknown (no compiler found)"))
+    elif arch is None:
+        findings.append(check("Architecture", WARN, arch_detail))
+    elif arch == "x64":
+        findings.append(check("Architecture", OK, f"x64 ({arch_detail})"))
+    else:
+        findings.append(check(
+            "Architecture",
+            WARN,
+            f"{arch} ({arch_detail}) -- the SDK build/packaging layout and the pinned server expect x64",
+        ))
 
     cxx = (config or {}).get("build", {}).get("cxx_standard")
     findings.append(check("C++ standard", OK if cxx else WARN, f"C++{cxx}" if cxx else "not set in module.toml"))
@@ -570,7 +729,12 @@ def cmd_package(args: argparse.Namespace) -> int:
     platform_tag = "win" if system == "Windows" else "linux"
     dist = root / "dist"
     dist.mkdir(exist_ok=True)
-    target = dist / f"{module_tbl['name']}-{version}-{platform_tag}-x64{binary.suffix}"
+    if args.release_name:
+        # Release artifacts carry exactly the developer-defined module name:
+        # <module>.dll / <module>.so (plan §36; e.g. my_module.dll).
+        target = dist / f"{module_tbl['name']}{binary.suffix}"
+    else:
+        target = dist / f"{module_tbl['name']}-{version}-{platform_tag}-x64{binary.suffix}"
     shutil.copy2(binary, target)
 
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
@@ -615,7 +779,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--preset", default=None, help="CMake configure preset (default: platform)")
     p.set_defaults(func=cmd_build)
 
-    p = sub.add_parser("test", help="run unit/lua/integration tests")
+    p = sub.add_parser("test", help="run unit + lua + integration test suites")
     p.add_argument("suite", nargs="?", default="all", choices=["all", "unit", "lua", "integration"])
     p.add_argument("--preset", default=None)
     p.set_defaults(func=cmd_test)
@@ -630,6 +794,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("package", help="copy the built module into dist/")
     p.add_argument("--preset", default=None)
+    p.add_argument(
+        "--release-name",
+        action="store_true",
+        help="name the artifact exactly <module>.dll/.so (plan §36) "
+        "instead of <module>-<version>-<platform>-x64",
+    )
     p.set_defaults(func=cmd_package)
 
     p = sub.add_parser("server", help="manage the MTA server test environment")

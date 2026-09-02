@@ -3,15 +3,21 @@ cmake_minimum_required(VERSION 3.27)
 # ---------------------------------------------------------------------------
 # config/module.toml is the single source of truth for module identity and
 # build options (plan PROMT.md §4/§5). It is read BEFORE project() so that
-# project(VERSION) itself comes from the TOML. Explicit CMake cache entries
+# module identity flows into the build. Explicit CMake cache entries
 # (-DSDK_MODULE_NAME=... etc.) remain as per-configure overrides.
 # ---------------------------------------------------------------------------
 include(cmake/core/module-config.cmake)
 read_module_toml("${CMAKE_CURRENT_SOURCE_DIR}/config/module.toml" MODULE_CFG)
 
-# The project is the SDK template; the produced module binary is named by the
-# [module] name in config/module.toml (default "base" -> base.dll / base.so).
-project(mta_sdk_module VERSION "${MODULE_CFG_module_version}" LANGUAGES C CXX)
+# The project is the SDK template. §38 keeps the SDK version separate from the
+# Module version, so project(VERSION) does NOT come from config/module.toml:
+# it follows SDK_VERSION in source/sdk/version.hpp -- the same single source
+# the C++ SDK includes and the CLI parses for `mta doctor`.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/source/sdk/version.hpp" _sdk_version_hpp)
+if(NOT _sdk_version_hpp MATCHES "#define SDK_VERSION \"([0-9]+[.][0-9]+[.][0-9]+)\"")
+  message(FATAL_ERROR "source/sdk/version.hpp must define SDK_VERSION as \"X.Y.Z\"")
+endif()
+project(mta_sdk_module VERSION "${CMAKE_MATCH_1}" LANGUAGES C CXX)
 
 # C++ standard: [build] cxx_standard is the default; -DCMAKE_CXX_STANDARD=...
 # still overrides it.
@@ -127,13 +133,15 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/.cache/${SDK_PLATFORM_TA
 # ---------------------------------------------------------------------------
 add_library(sdk_core OBJECT ${SDK_SOURCES})
 
-# Single source of truth for the module version: the float reported by
-# sample_version / module_details comes from project(VERSION ...) above
-# ("1.1.0" -> "1.1"), never from a hard-coded constant in module.cpp.
-if(PROJECT_VERSION MATCHES "^([0-9]+)\\.([0-9]+)")
+# Single source of truth for the MODULE version float (§38: Module version is
+# its own entity, separate from the SDK version that project(VERSION) now
+# carries): the [module] version in config/module.toml. "2.0.0" becomes the
+# float "2.0" reported by sample_version / module_details / InitModule --
+# never a hard-coded constant in module.cpp.
+if(MODULE_CFG_module_version MATCHES "^([0-9]+)\\.([0-9]+)")
   set(SDK_MODULE_VERSION "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}")
 else()
-  set(SDK_MODULE_VERSION "${PROJECT_VERSION}")
+  set(SDK_MODULE_VERSION "${MODULE_CFG_module_version}")
 endif()
 # [async] runtime knobs (plan §4/§13): worker count and task-queue limit are
 # compiled in from config/module.toml so the module and its config stay one

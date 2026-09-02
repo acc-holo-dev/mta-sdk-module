@@ -112,6 +112,7 @@ structured-binding sugar). Supported parameter types:
 | `mta::lua::rest_args` | all remaining values, last parameter only |
 | `mta::lua::context` | the VM and the calling resource name; consumes **no** Lua argument |
 | `mta::async::Callback` | function (a stable reference, see below) |
+| `mta::Resource` | name of a **running** resource; strict string, validated live (plan §17) |
 
 ```cpp
 MTA_LUA_FUNCTION("sample_join", "Joins values with a separator.")
@@ -155,6 +156,7 @@ applies the defaults.
 | tuple/pair | each element as a separate result |
 | `std::vector<T>` | each element as a separate result |
 | `mta::lua::Arguments` | every value as a separate result |
+| `mta::Resource` | its name (the stable Lua-side identity) |
 | `void` | nothing |
 
 ```cpp
@@ -246,6 +248,25 @@ mta::log::debug("outside a VM context");           // overload without L
 Levels: `Debug < Info < Warn < Error < Off`; a message prints when its
 level ≥ the current level.
 
+**Automatic context (plan §20).** The framework prefixes every message with
+the parts it knows about the current call site — developers never pass them.
+The module identity is always known; the running function, the task/timer id
+and the owning resource come from the thread-local diagnostic context that
+the registration trampolines and the async dispatcher fill:
+
+```text
+[Base Module:sample_timer @ play] sample timer: duplicate timer id 3
+[Base Module task #7 @ play] async completion failed: ...
+[Base Module timer #12 @ play] timer callback failed: ...
+```
+
+Inside a module function the function name and the owning resource are
+recorded automatically; background work, completion delivery, timer fires and
+callback calls carry their resource (and task/timer where applicable).
+`debug(L, ...)` skips the resource part because MTA's DebugPrintf already
+attributes VM-based debug messages; the `debug` overload without `L` gets
+the resource from the context when it is known.
+
 ---
 
 ## Background tasks (async)
@@ -321,6 +342,8 @@ completions.
 ```cpp
 auto timer = mta::timer::after(L, 5000, [] { ... });  // fires once
 auto timer = mta::timer::every(L, 1000, [] { ... });  // repeats until cancelled
+auto timer = mta::timer::every(L, 1000, 5,            // fires 5 times total
+                               [](std::uint64_t tick) { ... });
 
 timer.cancel();  // true if a scheduled timer was cancelled
 timer.valid();   // still scheduled (will fire again)
@@ -333,8 +356,10 @@ revives one of an older generation, and every scheduler-side drop (final
 fire, cancel, stop, stale generation) marks the handle invalid. A negative
 delay is an argument error.
 
-`mta::timer::after/every` take `std::function<void()>`; deliver values by
-capturing an `mta::async::Callback` (see the `sample_after` implementation).
+`mta::timer::after/every` take `std::function<void()>`; the counted `every`
+overload takes `std::function<void(std::uint64_t tick)>` (tick = 1, 2, ...;
+a repeat count <= 0 repeats forever). Deliver Lua values by capturing an
+`mta::async::Callback` (see the `sample_after` implementation).
 
 ---
 
@@ -456,6 +481,35 @@ if (auto self = mta::Resource::current(L))
 stopped resource reports `nullptr`/`alive() == false`. Samples:
 `sample_resource_name`, `sample_resource_find`.
 
+### `mta::Resource` as a typed binder argument/result (plan §6/§17)
+
+`mta::Resource` is a full binder parameter: Lua names the resource, and the
+binder resolves the name through `Resource::find` on every call. An unknown
+or already stopped resource is a readable argument error, never a dangling
+wrapper; a returned `Resource` is pushed to Lua as its name;
+`std::optional<mta::Resource>` accepts `nil`/absent as `nullopt`:
+
+```cpp
+MTA_FUNCTION("resource_report", "Name and liveness of a running resource.",
+    [](mta::Resource resource)
+    {
+        return std::make_tuple(resource.name(), resource.alive());
+    });
+```
+
+```lua
+resource_report("play")   -- "play", true
+resource_report("nope")   -- error: bad argument #1 to 'resource_report'
+                          --   (no running resource 'nope')
+resource_report(42)       -- error: bad argument #1 to 'resource_report'
+                          --   (expected resource, got number)  -- strict, no coercion
+```
+
+The signature metadata reports the type as `resource` (see
+`module_signature`). Samples: `sample_resource_arg`,
+`sample_resource_arg_optional`, `sample_resource_return`
+(`source/functions/native/resource_args.cpp`).
+
 ---
 
 ## Module identity and lifecycle
@@ -522,7 +576,7 @@ objects = true
 | `mta doctor` | Environment readiness: TOML validity + identity, SDK headers, Lua ABI byte-compare, toolchain probes, presets, build output, git state. Prints READY/NOT READY. |
 | `mta build [preset]` | CMake configure+build of the configured/default preset. |
 | `mta test all\|unit\|lua\|integration` | `ctest` filters; `integration` runs the real-server harness (PHASE 11). |
-| `mta docs` | Builds `sdk_docgen` and dumps registry metadata (name, description, derived signature) as markdown. |
+| `mta docs` | Builds `sdk_docgen` and dumps registry metadata (name, description, derived signature with argument/return types and optional markers, category/flags where derivable, explicit `n/a` markers, object methods) as markdown. |
 | `mta package` | Copies the module binary into `dist/<name>-<version>-<platform>` + sha256. |
 | `mta server install\|update\|version\|start\|stop\|test` | Pinned MTA server harness (isolated install, real-server integration). |
 | `mta init` / `mta new function\|object <name>` | Project scaffold / compile-ready skeletons (registered names verbatim). |

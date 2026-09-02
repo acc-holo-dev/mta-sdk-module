@@ -42,3 +42,32 @@ test_assert(t.name == "Alice" and t.hp == 50, "table set field")
 test_assert(sample_resource_name() == "test_resource", "sample_resource_name returns the calling resource")
 test_assert(sample_resource_find("test_resource") == true, "a running resource is found")
 test_assert(sample_resource_find("no_such_resource_xyz") == false, "an unknown resource is not found")
+
+-- native types as typed binder arguments (plan §6/§17): mta::Resource by
+-- name, validated live through the module manager
+local res_name, res_alive = sample_resource_arg("test_resource")
+test_assert(res_name == "test_resource" and res_alive == true, "mta::Resource parameter is validated live")
+
+local ok_res, err_res = pcall(sample_resource_arg, "no_such_resource_xyz")
+test_assert(ok_res == false, "an unknown resource raises")
+test_assert(err_res == "bad argument #1 to 'sample_resource_arg' (no running resource 'no_such_resource_xyz')",
+            "unknown resource error names the argument and the resource")
+
+local ok_res2, err_res2 = pcall(sample_resource_arg, 42)
+test_assert(ok_res2 == false
+            and err_res2 == "bad argument #1 to 'sample_resource_arg' (expected resource, got number)",
+            "a non-string argument is a typed error")
+
+test_assert(sample_resource_arg_optional("test_resource") == "test_resource", "optional resource provided")
+test_assert(sample_resource_arg_optional(nil) == nil, "optional resource omitted -> nil")
+test_assert(sample_resource_return("test_resource") == "test_resource", "a returned Resource is pushed as its name")
+
+-- signature metadata names the native type (plan §9)
+local res_sig = module_signature("sample_resource_arg")
+test_assert(res_sig ~= nil and res_sig.arguments[1].type == "resource", "resource parameter metadata")
+test_assert(res_sig.returns[1] == "string" and res_sig.returns[2] == "boolean",
+            "resource function return metadata")
+local res_opt_sig = module_signature("sample_resource_arg_optional")
+test_assert(res_opt_sig ~= nil and res_opt_sig.arguments[1].type == "resource"
+            and res_opt_sig.arguments[1].optional == true, "optional resource parameter metadata")
+test_assert(res_opt_sig.returns[1] == "string or nil", "optional resource return metadata")

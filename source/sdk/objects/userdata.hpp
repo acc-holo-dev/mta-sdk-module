@@ -39,6 +39,12 @@
 // from this SDK cannot collide on the same type name. A type without an
 // explicit name falls back to a compiler-dependent identity and logs a
 // warning -- use MTA_OBJECT in new code.
+//
+// Introspection (plan §9/§10): every MTA_METHOD call records the method's
+// name and derived signature (self excluded) into MethodInfo records; types
+// named with MTA_OBJECT are listed in mta::userdata::object_types(). The
+// docs generator (other/tools/docgen.cpp) materializes the types in a
+// scratch VM and lists the object methods from these records.
 
 #include "sdk/abi/module.hpp"
 #include "sdk/bind/bind.hpp"
@@ -49,9 +55,46 @@
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
+#include <vector>
 
 namespace mta::userdata
 {
+// Method metadata recorded at every MTA_METHOD call (plan §9): the self
+// parameter is not part of the signature. Consumed by the docs generator
+// (other/tools/docgen.cpp) and future tooling; independent of any VM.
+struct MethodInfo
+{
+    std::string name;
+    mta::lua::Signature signature;
+};
+
+// Introspection handle for one object type declared with MTA_OBJECT
+// (plan §10): tooling without a VM lists the methods registered through
+// MTA_METHOD through it. `materialize` runs the lazy metatable + method
+// registration in the given VM; `methods` returns the recorded metadata.
+struct ObjectTypeInfo
+{
+    std::string type;
+    void (*materialize)(lua_State *);
+    const std::vector<MethodInfo> &(*methods)();
+};
+
+// (internal) registration path; the public object_types() below stays
+// read-only (plan §10: introspection never mutates the registry).
+[[nodiscard]] inline std::vector<ObjectTypeInfo> &object_types_mutable() noexcept
+{
+    static std::vector<ObjectTypeInfo> types;
+    return types;
+}
+
+// Every object type registered through MTA_OBJECT in this process, in
+// registration order. Types without an explicit MTA_OBJECT name are not
+// listed: their identity would be compiler-dependent (plan §16).
+[[nodiscard]] inline const std::vector<ObjectTypeInfo> &object_types() noexcept
+{
+    return object_types_mutable();
+}
+
 template <typename T>
 class Registry
 {
@@ -63,6 +106,8 @@ public:
     // compiler-independent. Returns true (usable as a static initializer,
     // which is what the MTA_OBJECT macro does). The first call wins; later
     // conflicting calls are a programming error and are ignored with a log.
+    // The first successful naming also lists the type in object_types()
+    // (plan §10).
     static bool set_type_name(const char *name)
     {
         if (name == nullptr || *name == '\0')
@@ -71,9 +116,14 @@ public:
             return false;
         }
         auto &stored = type_name_();
-        if (stored.empty() || stored == name)
+        if (stored.empty())
         {
             stored = name;
+            register_type_();
+            return true;
+        }
+        if (stored == name)
+        {
             return true;
         }
         mta::log::error("MTA_OBJECT: type identity '", stored, "' is already set; ignoring '",
@@ -159,14 +209,25 @@ public:
         return static_cast<T *>(lua_touserdata(L, index));
     }
 
+    // Method metadata recorded at MTA_METHOD calls (plan §9/§10), in
+    // registration order. The registrar runs once per VM that uses the
+    // type, so records are deduplicated by name.
+    [[nodiscard]] static const std::vector<MethodInfo> &method_list() noexcept
+    {
+        return methods_();
+    }
+
     // Registers a method (obj:method(...)). Tag is unique per call site.
     template <std::size_t Tag, typename F>
     static void add_method(lua_State *L, const char *name, F fn)
     {
-        ensure(L);
         method_holder<Tag, F>::fn = std::move(fn);
         method_holder<Tag, F>::registered_name = name;
+        // Metadata for the docs generator (plan §10): derived from F with
+        // the self parameter skipped; recording is independent of the VM.
+        record_method(name, mta::lua::detail::method_signature_of<F>());
 
+        ensure(L);
         luaL_getmetatable(L, identity());
         lua_getfield(L, -1, "__index");
         // lua_pushcclosure directly: the lua_pushcfunction macro cannot cope
@@ -177,6 +238,19 @@ public:
     }
 
 private:
+    // Adds this type to the process-wide introspection list (plan §10): the
+    // docs generator lists object methods through it. Called once, by
+    // set_type_name on the first successful naming -- the registrar may not
+    // be set yet; the stored callbacks read the current state at call time.
+    static void register_type_()
+    {
+        object_types_mutable().push_back(ObjectTypeInfo{
+            type_name_(),
+            [](lua_State *vm) { ensure(vm); },
+            []() -> const std::vector<MethodInfo> & { return methods_(); },
+        });
+    }
+
     static Registrar &registrar_()
     {
         static Registrar registrar = nullptr;
@@ -187,6 +261,28 @@ private:
     {
         static std::string name;
         return name;
+    }
+
+    static std::vector<MethodInfo> &methods_()
+    {
+        static std::vector<MethodInfo> records;
+        return records;
+    }
+
+    // Records one method's metadata for tooling (plan §10). Deduplicated by
+    // name: ensure() runs the registrar in every VM that uses the type.
+    static void record_method(const char *name, mta::lua::Signature signature)
+    {
+        auto &records = methods_();
+        for (const auto &record : records)
+        {
+            if (record.name == name)
+            {
+                return;
+            }
+        }
+        records.push_back(MethodInfo{name == nullptr ? std::string() : std::string(name),
+                                     std::move(signature)});
     }
 
     // The metatable identity (plan §16): module-aware, deterministic, and
@@ -232,10 +328,10 @@ private:
 
         static int trampoline(lua_State *L) noexcept
         {
-            // Name the running method: argument errors render
-            // "bad argument #2 to 'set' (expected number, got string)".
-            mta::lua::detail::current_function_name() = registered_name;
-            return mta::lua::protected_call(L, &method_holder<Tag, F>::call);
+            // Name the running method and record the resource: argument
+            // errors render "bad argument #2 to 'set' (expected number, got
+            // string)" and log messages carry the call site (plan §20).
+            return mta::lua::protected_call_named(L, &method_holder<Tag, F>::call, registered_name);
         }
 
         static int call(lua_State *L)

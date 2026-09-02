@@ -40,3 +40,15 @@ test_assert(not ok2 and string.find(err2, "bad argument #1 to 'sample_range'", 1
 local ok3, err3 = pcall(sample_minmax, 5)
 test_assert(not ok3 and string.find(err3, "got no value", 1, true) ~= nil,
             "missing required argument reports typed error")
+
+-- typed rest_args / context binder parameters (plan §6): the binder reads
+-- them itself, no body-style hand reading involved
+test_assert(sample_rest_count("a", "b", "c") == 3, "typed rest_args counts the tail")
+test_assert(sample_rest_count() == 0, "typed rest_args with an empty tail")
+test_assert(sample_context_caller() == "test_resource", "typed context parameter reports the caller")
+
+local rest_sig = module_signature("sample_rest_count")
+test_assert(rest_sig ~= nil and rest_sig.variadic == true, "rest_args signature is variadic")
+
+local ctx_sig = module_signature("sample_context_caller")
+test_assert(ctx_sig ~= nil and #ctx_sig.arguments == 0, "context consumes no signature argument")

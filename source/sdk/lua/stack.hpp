@@ -87,6 +87,20 @@ namespace detail
     ::mta::errors::raise_error(::mta::errors::Category::InvalidType, "bad argument #", index, " (",
                                detail_text, ")");
 }
+
+// "bad argument #N to 'name' (DETAIL)" for a native object reference the
+// server cannot resolve right now (e.g. an unknown or already stopped
+// resource) -- a well-typed value that names no living entity (plan §17).
+[[noreturn]] inline void bad_argument_object(int index, const char *detail_text)
+{
+    if (const char *name = current_function_name())
+    {
+        ::mta::errors::raise_error(::mta::errors::Category::InvalidObject, "bad argument #", index,
+                                   " to '", name, "' (", detail_text, ")");
+    }
+    ::mta::errors::raise_error(::mta::errors::Category::InvalidObject, "bad argument #", index,
+                               " (", detail_text, ")");
+}
 } // namespace detail
 
 [[nodiscard]] inline int arg_count(lua_State *L) noexcept

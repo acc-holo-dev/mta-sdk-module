@@ -22,6 +22,7 @@
 //   std::optional<T>        optional argument: nil/absent -> nullopt
 //   mta::lua::rest_args     trailing (variadic) arguments, last parameter only
 //   mta::lua::context       VM and resource name; takes NO Lua argument
+//   mta::Resource           name of a running resource, validated live (§17)
 //
 // Optional parameters may also be written with plain C++ defaults:
 //
@@ -36,12 +37,14 @@
 //   std::vector<T>             elements are expanded into a result list
 //   std::optional<T>           nil when the value is absent
 //   mta::lua::Arguments        a whole result list
+//   mta::Resource              pushed as its name (the stable Lua identity)
 
 #include "sdk/lua/argument.hpp"
 #include "sdk/lua/arguments.hpp"
 #include "sdk/lua/protect.hpp"
 #include "sdk/lua/stack.hpp"
 #include "sdk/abi/module.hpp"
+#include "sdk/native/resource.hpp"
 #include "sdk/runtime/callback.hpp"
 
 #include <array>
@@ -89,7 +92,17 @@ struct Signature
     std::vector<std::string> returns; // empty = returns nothing / unknown
     bool variadic = false;            // trailing rest_args parameter
     bool derived = false;
+
+    // Capability flags derived together with the arguments (plan §9):
+    // function_flag_* bits below. The registration bridge copies them into
+    // Spec::flags; object methods keep them in their recorded signature.
+    std::uint32_t flags = 0;
 };
+
+// Capability flags (plan §9): what the binder derived from the C++ signature
+// at registration. Rendered by the docs generator (other/tools/docgen.cpp).
+inline constexpr std::uint32_t function_flag_variadic = 1u << 0; // trailing rest_args parameter
+inline constexpr std::uint32_t function_flag_callback = 1u << 1; // takes a Lua function argument
 
 namespace detail
 {
@@ -204,6 +217,8 @@ consteval const char *lua_type_name()
         return "string";
     else if constexpr (std::is_same_v<U, Table>)
         return "table";
+    else if constexpr (std::is_same_v<U, mta::Resource>)
+        return "resource";
     else if constexpr (std::is_same_v<U, Argument> || std::is_same_v<U, Arguments>)
         return "any";
     else if constexpr (is_optional_v<U>)
@@ -223,9 +238,14 @@ void fill_argument_info(Signature &signature)
     else if constexpr (std::is_same_v<U, rest_args>)
     {
         signature.variadic = true;
+        signature.flags |= function_flag_variadic;
     }
     else
     {
+        if constexpr (std::is_same_v<U, mta::async::Callback>)
+        {
+            signature.flags |= function_flag_callback;
+        }
         signature.arguments.push_back(
             ArgumentInfo{std::string(lua_type_name<U>()), is_optional_v<U>});
     }
@@ -280,6 +300,25 @@ template <typename F>
 Signature signature_of()
 {
     return signature_impl<F>(std::make_index_sequence<callable_traits<F>::arity>{});
+}
+
+// Signature of an object method (objects/userdata.hpp): the self parameter
+// (the first one) is not part of the Lua-facing signature -- the method is
+// called as obj:method(...).
+template <typename F>
+Signature method_signature_of()
+{
+    using args_type = typename callable_traits<F>::args;
+    constexpr std::size_t arity = callable_traits<F>::arity;
+    static_assert(arity >= 1, "a method must take self as its first parameter");
+    Signature signature;
+    signature.derived = true;
+    [&signature]<std::size_t... I>(std::index_sequence<I...>) {
+        (fill_argument_info<std::remove_cvref_t<std::tuple_element_t<I + 1, args_type>>>(signature),
+         ...);
+    }(std::make_index_sequence<arity - 1>{});
+    fill_return_type<typename callable_traits<F>::result>(signature.returns);
+    return signature;
 }
 
 // --- reading a single argument --------------------------------------------------
@@ -340,6 +379,36 @@ T pull_arg(lua_State *L, int index)
         rest_args rest;
         rest.values.read(L, index);
         return rest;
+    }
+    else if constexpr (std::is_same_v<U, mta::Resource>)
+    {
+        // Native MTA objects (plan §17): a Resource is named in Lua -- the
+        // only identity the frozen module ABI provides -- and validated LIVE
+        // through the module manager (Resource::find, the precedent of
+        // resource.cpp). An unknown or already stopped resource is a
+        // readable argument error, never a dangling wrapper.
+        const int normalized = normalize_index(L, index);
+        const int type_value = lua_type(L, normalized);
+        if (type_value == LUA_TNONE)
+        {
+            detail::bad_argument_missing(index, "resource");
+        }
+        // Strictly a string: a resource name is an identity, so numbers are
+        // NOT coerced into it (unlike check_string) -- the type error is the
+        // more diagnostic message.
+        if (type_value != LUA_TSTRING)
+        {
+            detail::bad_argument_type(index, "resource", detail::type_name(type_value));
+        }
+        std::size_t length = 0;
+        const char *text = lua_tolstring(L, normalized, &length);
+        const std::string name(text ? text : "", length);
+        std::optional<mta::Resource> resource = mta::Resource::find(name);
+        if (!resource.has_value())
+        {
+            detail::bad_argument_object(index, ("no running resource '" + name + "'").c_str());
+        }
+        return std::move(*resource);
     }
     else if constexpr (std::is_same_v<U, bool>)
     {
@@ -574,10 +643,11 @@ struct holder
 
     static int entry(lua_State *L) noexcept
     {
-        // Name the running function once per call: argument errors render
-        // "bad argument #N to '<name>' (expected ..., got ...)".
-        detail::current_function_name() = registered_name;
-        return protected_call(L, &holder<Tag, F>::dispatch);
+        // Name the running function and record its resource once per call:
+        // argument errors render "bad argument #N to '<name>' (expected ...,
+        // got ...)" and log messages carry the call site (plan §20; see the
+        // diagnostic context in protect.hpp).
+        return protected_call_named(L, &holder<Tag, F>::dispatch, registered_name);
     }
 
     static int dispatch(lua_State *L)

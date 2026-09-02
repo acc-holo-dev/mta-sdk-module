@@ -68,4 +68,10 @@ private:
 // Repeating: fn(tick-less) fires every delay_ms until cancelled or the
 // owning resource stops.
 [[nodiscard]] Timer every(lua_State *lua_vm, int delay_ms, std::function<void()> fn);
+
+// Repeating with a fire limit: fn(tick) fires every delay_ms, repeat_count
+// times in total (tick = 1, 2, ...). repeat_count <= 0 repeats forever --
+// the same as every(). Resource-aware like the other forms.
+[[nodiscard]] Timer every(lua_State *lua_vm, int delay_ms, std::int64_t repeat_count,
+                          std::function<void(std::uint64_t tick)> fn);
 } // namespace mta::timer

@@ -327,6 +327,146 @@ generated `sdkintegration` resource for a complete runnable script.
 
 ---
 
+## 9. The canonical `sum` example: types, errors, manual validation
+
+This section is the compact reference for how arguments, results and errors
+work end to end; §2 above showed the same mechanics inside a feature.
+
+### The function
+
+```cpp
+#include <mta/sdk.hpp>
+
+// Lambda style: the C++ signature IS the documentation -- the binder checks
+// the arguments and pushes the result automatically.
+MTA_FUNCTION("sum",
+    [](double a, double b)
+    {
+        return a + b;
+    });
+```
+
+### The calls and their results
+
+```lua
+sum(10, 20)        -- 30
+```
+
+```lua
+sum(10)            -- the second argument is absent
+```
+
+The conceptual result of this call is: **argument #2 is missing**. The SDK
+renders the same condition in its own diagnostic format (plan §7):
+
+```text
+bad argument #2 to 'sum' (expected number, got no value)
+```
+
+```lua
+sum("10", 20)      -- the first argument has the wrong type
+```
+
+The conceptual result of this call is: **argument #1 has invalid type**,
+rendered as:
+
+```text
+bad argument #1 to 'sum' (expected number, got string)
+```
+
+Both concrete formats are pinned by regression tests
+(`other/tests/lua/scripts/045_errors.lua`); every message names the argument
+position, the function and what was expected/found, so it is usable in
+production logs.
+
+### Which types the binder accepts
+
+You can always see what a function accepts: `module_signature("sum")`
+returns the derived metadata (argument/return types), and `mta docs` renders
+it for every registered function and object method. The supported parameter
+types:
+
+| C++ parameter | Lua side |
+|---|---|
+| `bool` | boolean |
+| `double`, `float`, integers | number (integers range-checked) |
+| `std::string`, `std::string_view` | string |
+| `std::optional<T>` | value or `nil`/absent → `nullopt` |
+| `mta::lua::Table` / `Argument` / `rest_args` | table / any value / the tail |
+| `mta::async::Callback` | function (stable reference) |
+| `mta::lua::context` | — (consumes no Lua argument) |
+| `mta::Resource` | name of a running resource, validated live (plan §17) |
+
+Result types: scalars, `std::optional<T>` (`nil` when absent), tuple/pair and
+`std::vector<T>` (expanded into several results), `mta::lua::Arguments`,
+`void` — and `mta::Resource`, which is pushed as its name.
+
+### How errors are generated
+
+Every registered function runs through a protected trampoline
+(`source/sdk/lua/protect.hpp`): C++ exceptions become proper Lua errors and
+never escape into the server process (local C++ objects are destroyed
+first). Argument problems are raised by the typed readers as categorized
+errors (`InvalidType`, `MissingArgument`, `InvalidObject`, …) and rendered as
+`bad argument #N to 'name' (…)`; anything categorized `InternalError` is
+rendered as `internal module error: …`, so a scripter mistake can never
+masquerade as a framework bug (plan §19). The same model covers object
+validation (`expected counter, got table`) and native entities
+(`no running resource 'xyz'`).
+
+### Manual validation
+
+Automatic binding checks presence, count and type. Anything beyond that —
+ranges, cross-field constraints, business rules — you validate in the body
+and raise with `mta::lua::raise_error`:
+
+```cpp
+MTA_FUNCTION("divide", "Divides a by b and rejects zero.",
+    [](double a, double b)
+    {
+        if (b == 0)
+        {
+            mta::lua::raise_error("argument #2 must not be zero");
+        }
+        return a / b;
+    });
+```
+
+```lua
+divide(1, 0)   -- error: argument #2 must not be zero
+```
+
+Body style keeps the automatic typed reading (`args<...>`) and adds manual
+checks on top:
+
+```cpp
+MTA_LUA_FUNCTION("clamp", "Clamps value into [lo, hi].")
+{
+    auto [value, lo, hi] = mta::lua::args<double, double, double>(L);
+    if (lo > hi)
+    {
+        mta::lua::raise_error("lo must not exceed hi");
+    }
+    return mta::lua::push_results(L, value < lo ? lo : (value > hi ? hi : value));
+}
+```
+
+### When automatic binding is not enough
+
+* The parameter list is not known at compile time — use body style with
+  `mta::lua::rest_args` / `Argument` snapshots (see `greet_many` above).
+* You need raw stack access or a custom calling convention — body style with
+  `check_*`/`opt_*` (api.md, "Direct stack access").
+* Body-style registration cannot derive signature metadata: `module_signature`
+  reports `derived == false` and `mta docs` says so explicitly (plan §9/§10).
+* Per-function error declarations are not part of the metadata (the binder
+  converts raised errors uniformly); document special errors in the
+  description.
+* The `self` parameter of object methods is bound by `MTA_METHOD`, not by the
+  free-function binder.
+
+---
+
 ## Where each concept is exercised in the repo
 
 | Concept | Sample | Tests |
@@ -336,10 +476,12 @@ generated `sdkintegration` resource for a complete runnable script.
 | async task + handle | `functions/async/task_demo.cpp` | `035_task.lua` |
 | timers + handles | `functions/async/timer_demo.cpp` | `038_timer.lua` |
 | callback delivery | `functions/async/async_add.cpp` | `030_async.lua` |
+| typed rest_args / context | `functions/basics/typed_params.cpp` | `040_binder.lua` |
 | objects | `functions/objects/counter.cpp` | `060_features.lua` |
 | events | `functions/basics/trigger_demo.cpp` | `060_features.lua` |
 | per-resource state | `functions/state/session.cpp` | `070_lifecycle.lua` |
 | restart generations | — (harness-level) | `072_restart.lua` |
 | native Resource | `functions/info/resource_info.cpp` | `060_features.lua` |
+| native Resource as binder argument/result | `functions/native/resource_args.cpp` | `060_features.lua` |
 | stress | — | `080_stress.lua` |
 | full restart + shutdown on a real server | `other/server/mta_server.py` | `mta test integration` |

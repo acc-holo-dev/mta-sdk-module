@@ -172,6 +172,11 @@ bool Callback::call(const mta::lua::Arguments &arguments) const
         return false;
     }
 
+    // Attribute log messages emitted around this call to the callback's
+    // resource (plan §20); restored when the call returns.
+    mta::lua::detail::ScopedDiagnosticContext scope{nullptr, 0, 0};
+    scope.set_resource(resource_);
+
     const int base = lua_gettop(vm);
     lua_rawgeti(vm, LUA_REGISTRYINDEX, ref_);
     if (lua_isfunction(vm, -1) == 0)

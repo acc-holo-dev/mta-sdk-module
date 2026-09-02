@@ -7,6 +7,7 @@
 #include "sdk/logging/logging.hpp"
 #include "sdk/resources/resources.hpp"
 #include "sdk/runtime/scheduler.hpp"
+#include "sdk/version.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -99,8 +100,14 @@ bool initialize(ILuaModuleManager10 *manager, char *module_name, char *author, f
     mta::async::Scheduler::instance().start();
 
     const char *server_version = manager->GetVersionString();
-    mta::log::info("module: loaded ", module_details.name, " (MTA ",
-                   server_version ? server_version : "?", ")");
+    // Load diagnostics carry the four §38 version entities separately, each
+    // labelled: SDK version, Module version, module ABI version and the
+    // runtime MTA server version. The InitModule float (module_details.
+    // version) stays Module-version-only -- that is the whole surface the
+    // MTA server ABI defines for binary metadata.
+    mta::log::info("module: loaded ", module_details.name, " (module ",
+                   SDK_MODULE_VERSION, ", sdk ", SDK_VERSION, ", abi ",
+                   SDK_ABI_VERSION, "; MTA ", server_version ? server_version : "?", ")");
     return true;
 }
 

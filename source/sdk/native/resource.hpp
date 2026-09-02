@@ -21,6 +21,13 @@
 //     {
 //         mta::log::info("called from resource ", self->name());
 //     }
+//
+// Binder integration (plan §6/§17): a Resource is a full typed-binder
+// parameter and result. Lua names the resource; the binder (bind.hpp)
+// validates the name LIVE through the module manager on every call and
+// raises "bad argument #N to 'name' (no running resource '...')" when the
+// server cannot resolve it. A returned Resource is represented by its name
+// -- the only stable Lua-side identity the ABI provides (push_one below).
 
 #include "sdk/lua/common.hpp"
 
@@ -59,4 +66,15 @@ private:
 
     std::string name_;
 };
+
+// Result pusher hook (mta::lua::push_results / the binder's push_result): a
+// Resource is represented in Lua by its name. Found through
+// argument-dependent lookup on mta::Resource, so no Lua-layer header needs
+// to depend on the native layer. Pushing the name is always safe: it is the
+// identity, not a handle -- liveness is re-checked by vm()/alive().
+inline void push_one(lua_State *lua_vm, const Resource &resource)
+{
+    const std::string &name = resource.name();
+    lua_pushlstring(lua_vm, name.data(), name.size());
+}
 } // namespace mta

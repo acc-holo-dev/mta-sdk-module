@@ -44,10 +44,14 @@ struct Spec
     mta::lua::Signature signature{};
 
     // Free-form grouping; empty unless a future registration spelling
-    // provides it.
+    // provides it. The docs generator marks the empty value as "n/a"
+    // (plan §10: underivable information is stated explicitly).
     std::string category{};
 
-    // Reserved for binder capabilities (e.g. coroutine support).
+    // Binder capabilities derived from the C++ signature (plan §9):
+    // mta::lua::function_flag_* bits (variadic tail, Lua function
+    // parameter); 0 for body-style registrations. Copied from
+    // Signature::flags by the registration bridge.
     std::uint32_t flags = 0;
 };
 
