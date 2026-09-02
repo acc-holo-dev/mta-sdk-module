@@ -687,6 +687,8 @@ struct holder
         ::mta::errors::raise_error(::mta::errors::Category::InvalidArgument,
                                    "bad argument count (expected at least ", required_counts[arity],
                                    " arguments, got ", lua_gettop(L), ")");
+        // raise_error always longjmps; unreachable, closes the exit path.
+        return 0;
     }
 };
 

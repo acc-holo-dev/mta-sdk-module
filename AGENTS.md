@@ -93,3 +93,5 @@ MTA server binary is) and never uses a developer-installed server.
 `mta doctor`, `mta build`, `mta test unit`, `mta test lua` — and
 `mta test integration` whenever runtime code (`source/sdk/runtime/`,
 `source/sdk/resources/`, `source/sdk/abi/`) changed.
+
+Optional static analysis: cppcheck ships in the MinGW toolchain (`build/toolchain/mingw/mingw64/bin/cppcheck.exe`). Gate on real findings only — its reports of `Null pointer dereference: (int*)NULL` on `assert(lua_vm)` lines are bogus assert modeling, and its `uninitMemberV` warnings on registry/introspection structs (`Spec`, `ObjectTypeInfo`) are conservative: those structs are constructed only in registration paths that set every member.
