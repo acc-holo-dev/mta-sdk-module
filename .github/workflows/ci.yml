@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   linux:
-    name: Linux (GCC)
+    name: Linux (GCC) — build + unit + lua + CLI smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -37,11 +37,41 @@ jobs:
       - name: Build
         run: cmake --build --preset linux-gcc
 
-      - name: Test
+      - name: Test (unit + lua)
         run: ctest --preset linux-gcc --output-on-failure
 
+      # Exercise the `mta` CLI on a real built module: the doc generator
+      # (registry metadata, no Lua VM) and the separated test filters.
+      - name: CLI smoke (docs, test unit, test lua)
+        run: |
+          python other/tools/mta/cli.py docs
+          python other/tools/mta/cli.py test unit
+          python other/tools/mta/cli.py test lua
+
+  linux-clang:
+    name: Linux (Clang)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++ clang
+
+      - name: Configure
+        run: >
+          cmake -B build/linux-clang -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Build
+        run: cmake --build build/linux-clang
+
+      - name: Test
+        run: ctest --test-dir build/linux-clang --output-on-failure
+
   windows-mingw:
-    name: Windows (MinGW-w64)
+    name: Windows (MinGW-w64) — build + unit + lua
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -68,7 +98,7 @@ jobs:
         run: ctest --preset win-mingw --output-on-failure
 
   windows-msvc:
-    name: Windows (MSVC)
+    name: Windows (MSVC) — build + unit + lua
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -86,3 +116,45 @@ jobs:
 
       - name: Test
         run: ctest --preset win-msvc --output-on-failure
+
+  doctor:
+    name: mta doctor (environment readiness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install toolchain probes
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++
+
+      - name: Run doctor
+        run: python other/tools/mta/cli.py doctor
+
+  integration:
+    # Plan PHASE 13: run the real-server integration where the environment
+    # allows. The harness downloads a pinned MTA server build and drives a
+    # real server through its console; this can fail for reasons outside
+    # the SDK (download availability, runner console quirks), so the job is
+    # a non-blocking canary.
+    name: Real-server integration (canary)
+    runs-on: windows-latest
+    continue-on-error: true
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+
+      - name: Build the module
+        shell: msys2 {0}
+        run: python other/tools/mta/cli.py build win-mingw
+
+      - name: Install the pinned server and run the integration
+        shell: msys2 {0}
+        run: python other/tools/mta/cli.py server install && python other/tools/mta/cli.py server test
