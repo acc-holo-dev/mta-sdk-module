@@ -1,6 +1,6 @@
 #pragma once
 
-// Reusable layer (plan §23): small, module-agnostic utilities that several
+// Reusable layer: small, module-agnostic utilities that several
 // functions can share. This header does not depend on the SDK and never
 // touches Lua -- code here is plain C++ that a module function may call.
 

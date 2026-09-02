@@ -55,11 +55,11 @@ MTA_LUA_FUNCTION("my_sum", "Adds two numbers.")
 ```
 
 Rebuild — the my_sum function is already available. No CMake, no registry or
-central file edits needed (plan §3: a new .cpp lands in the build by itself).
+central file edits needed (a new .cpp lands in the build by itself).
 
 ## Step 5. Rename the module
 
-The module identity lives in exactly one file — config/module.toml (plan §5):
+The module identity lives in exactly one file — config/module.toml:
 
 ```toml
 [module]
@@ -83,7 +83,7 @@ nothing is duplicated in C++ sources. (CMake cache variables
 ```
 
 3. Restart the server. The module's load diagnostic shows its identity and
-   the four separate version entities (plan §38):
+   the four separate version entities:
 
 ```
 module: loaded my_mod (module 0.1, sdk 1.0.0, abi 1; MTA 1.6.0-9.21788.0)

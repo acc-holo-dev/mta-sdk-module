@@ -1,4 +1,4 @@
-// Typed binder parameters beyond scalars (plan §6): rest_args (the variadic
+// Typed binder parameters beyond scalars: rest_args (the variadic
 // tail) and context (VM + calling resource; consumes no Lua argument) are
 // read by the binder itself -- a body-style function would unpack the same
 // values by hand with args<...>.

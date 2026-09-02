@@ -1,5 +1,6 @@
--- PHASE 4: unified error model and signature metadata.
--- The error matrix follows plan §7 exactly; metadata follows plan §9.
+-- Unified error model and signature metadata.
+-- The error matrix follows the documented error format exactly;
+-- metadata follows the documented signature metadata rules.
 
 -- wrong type at position 1
 local ok, err = pcall(sample_minmax, "hello", 10)

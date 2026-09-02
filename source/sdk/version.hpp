@@ -1,7 +1,7 @@
 #pragma once
 
 // ===========================================================================
-// The SDK's own version facts (plan PROMT.md §38) -- the single source of
+// The SDK's own version facts -- the single source of
 // truth for the two SDK-side version entities:
 //
 //   SDK_VERSION     the release version of this SDK itself;
@@ -9,7 +9,7 @@
 //                   entry points + ILuaModuleManager10 contract) that this
 //                   SDK implements.
 //
-// §38 keeps four version concepts strictly separate:
+// Four version concepts are kept strictly separate:
 //
 //   SDK version      -> SDK_VERSION below
 //   Module version   -> config/module.toml [module] version (via CMake

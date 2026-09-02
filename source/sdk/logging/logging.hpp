@@ -14,7 +14,7 @@
 //     mta::log::error("request failed: ", reason);
 //     mta::log::debug(L, "called in resource context");
 //
-// Automatic context (plan §20): the framework prefixes every message with
+// Automatic context: the framework prefixes every message with
 // the parts it knows about the current call site -- the module identity and,
 // on the main thread / inside async dispatch, the running function, the
 // task/timer id and the owning resource. Developers never pass these values:

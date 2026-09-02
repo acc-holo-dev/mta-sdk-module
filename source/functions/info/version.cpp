@@ -1,6 +1,6 @@
 // An argument-less function returning a table. Facts come from the facade
 // (module identity + SDK/ABI versions + server facts); the ABI layer stays
-// internal (plan §42). §38: the four version entities are reported as
+// internal. The four version entities are reported as
 // separate fields -- module_version, sdk_version, abi_version, mta/netcode.
 
 #include <mta/sdk.hpp>

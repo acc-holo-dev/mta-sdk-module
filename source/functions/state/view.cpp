@@ -1,4 +1,4 @@
-// The state view (plan §18): mta::state / MTA_STATE wraps the calling VM for
+// The state view: mta::state / MTA_STATE wraps the calling VM for
 // synchronous operations -- borrowed access, never stored. sample_state
 // exposes the view's basics; sample_state_readers exercises the typed
 // readers (check_*) and the view's push_results.

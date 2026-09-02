@@ -1,4 +1,4 @@
-// Timer handles (plan §15): mta::timer::after fires once, every repeats
+// Timer handles: mta::timer::after fires once, every repeats
 // until cancelled or the owning resource stops. Both return a handle with
 // cancel()/valid(); timers are resource-aware and never survive a restart
 // of their resource.
@@ -18,7 +18,7 @@ namespace
 {
 // Live timer handles of the calling resource (main thread only; cleared
 // when the resource stops). HandleMap is the reusable id->handle registry
-// from the library layer (plan §23: functions may use library).
+// from the library layer (functions may use library).
 mta::resources::Store<mta::library::base::HandleMap<std::uint64_t, mta::timer::Timer>> g_timers;
 } // namespace
 

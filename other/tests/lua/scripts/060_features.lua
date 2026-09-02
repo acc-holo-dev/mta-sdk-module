@@ -8,7 +8,7 @@ test_assert(c:get() == 100, "counter set")
 test_assert(c:add(5) == 105, "counter add returns new value")
 test_assert(c:get() == 105, "counter add persisted")
 
--- stable type identity (plan §16): type validation names the declared type
+-- stable type identity: type validation names the declared type
 local unbound_get = c.get
 local ok_t, err_t = pcall(unbound_get, 42)
 test_assert(ok_t == false, "calling get without a counter fails")
@@ -38,12 +38,12 @@ test_assert(name2 == "unknown" and hp2 == 0, "table get defaults")
 local t = sample_table_set({hp = 50}, "Alice")
 test_assert(t.name == "Alice" and t.hp == 50, "table set field")
 
--- native types (plan §17): the safe Resource wrapper
+-- native types: the safe Resource wrapper
 test_assert(sample_resource_name() == "test_resource", "sample_resource_name returns the calling resource")
 test_assert(sample_resource_find("test_resource") == true, "a running resource is found")
 test_assert(sample_resource_find("no_such_resource_xyz") == false, "an unknown resource is not found")
 
--- native types as typed binder arguments (plan §6/§17): mta::Resource by
+-- native types as typed binder arguments: mta::Resource by
 -- name, validated live through the module manager
 local res_name, res_alive = sample_resource_arg("test_resource")
 test_assert(res_name == "test_resource" and res_alive == true, "mta::Resource parameter is validated live")
@@ -62,7 +62,7 @@ test_assert(sample_resource_arg_optional("test_resource") == "test_resource", "o
 test_assert(sample_resource_arg_optional(nil) == nil, "optional resource omitted -> nil")
 test_assert(sample_resource_return("test_resource") == "test_resource", "a returned Resource is pushed as its name")
 
--- signature metadata names the native type (plan §9)
+-- signature metadata names the native type
 local res_sig = module_signature("sample_resource_arg")
 test_assert(res_sig ~= nil and res_sig.arguments[1].type == "resource", "resource parameter metadata")
 test_assert(res_sig.returns[1] == "string" and res_sig.returns[2] == "boolean",

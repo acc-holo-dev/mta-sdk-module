@@ -22,8 +22,7 @@ void fallback_write(std::FILE *target, std::string_view message)
     std::fflush(target);
 }
 
-// The context the framework knows about the current call site (plan §20:
-// module, function, resource, task, error -- added automatically, callers
+// The context the framework knows about the current call site (// module, function, resource, task, error -- added automatically, callers
 // never pass them). The module identity is the compile-time module name; the
 // function/resource/task/timer parts come from the thread-local diagnostic
 // context that the registration trampolines and the async dispatcher fill:

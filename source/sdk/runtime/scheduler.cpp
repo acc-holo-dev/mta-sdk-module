@@ -72,7 +72,7 @@ struct Completion
     std::string resource;
     std::uint64_t generation = 0;
     // The async task the completion belongs to (0 = unattributed); part of
-    // the automatic log-message context (plan §20).
+    // the automatic log-message context.
     std::uint64_t task_id = 0;
 };
 
@@ -80,7 +80,7 @@ struct Timer
 {
     std::uint64_t id = 0;
     std::string resource;
-    // VM generation of the owning resource at creation time (plan §14): a
+    // VM generation of the owning resource at creation time: a
     // timer never fires across a restart of its resource.
     std::uint64_t generation = 0;
     // Shared with the public handle when one exists (post_timer_handle):
@@ -183,7 +183,7 @@ void Scheduler::worker_loop()
         completion.generation = job.generation;
         completion.task_id = job.state->id;
         // Attribute log messages emitted by the background work to the
-        // owning resource and task (plan §20); the context is per-thread, so
+        // owning resource and task; the context is per-thread, so
         // a worker thread gets its own.
         mta::lua::detail::ScopedDiagnosticContext scope{nullptr, job.state->id, 0};
         scope.set_resource(job.resource);
@@ -259,7 +259,7 @@ void Scheduler::pump()
 {
     // Deliver the results of finished background tasks. A completion owned
     // by a resource whose VM is gone or whose generation has ended never
-    // reaches Lua (plan §14).
+    // reaches Lua.
     std::vector<Completion> ready;
     {
         std::lock_guard<std::mutex> lock(impl_->queue_mutex);
@@ -286,7 +286,7 @@ void Scheduler::pump()
         }
 
         // Attribute the delivery (and its log output) to the owning
-        // resource and task (plan §20).
+        // resource and task.
         mta::lua::detail::ScopedDiagnosticContext scope{nullptr, entry.task_id, 0};
         scope.set_resource(entry.resource);
         try
@@ -308,7 +308,7 @@ void Scheduler::pump()
     // timers (post_timer/cancel_timer), and mutating impl_->timers while
     // iterating over it would invalidate iterators and references. Timers of
     // a stale generation (their resource restarted meanwhile) are dropped:
-    // they must never fire into a fresh VM (plan §14).
+    // they must never fire into a fresh VM.
     const auto now = clock_type::now();
 
     std::vector<Timer> due;
@@ -341,7 +341,7 @@ void Scheduler::pump()
     {
         ++timer.fired;
         // Attribute the dispatch (and its log output) to the firing timer
-        // and its resource (plan §20).
+        // and its resource.
         mta::lua::detail::ScopedDiagnosticContext scope{nullptr, 0, timer.id};
         scope.set_resource(timer.resource);
         try
@@ -360,7 +360,7 @@ void Scheduler::pump()
         // The handle may have been cancelled from inside this very callback:
         // the scheduler-side erase cannot find a timer that is being
         // dispatched from the local snapshot, so drop it here -- cancel()
-        // must mean the completion never fires again (plan §15).
+        // must mean the completion never fires again.
         if (timer.state != nullptr && timer.state->cancelled)
         {
             continue;
@@ -472,7 +472,7 @@ bool Scheduler::cancel_timer(std::uint64_t timer_id)
 void Scheduler::handle_resource_stopped(const std::string &resource)
 {
     // Timers of the stopped resource are cancelled outright; handles of
-    // public timers report invalid afterwards (plan §15).
+    // public timers report invalid afterwards.
     for (auto it = impl_->timers.begin(); it != impl_->timers.end();)
     {
         if (it->resource == resource)
@@ -490,7 +490,7 @@ void Scheduler::handle_resource_stopped(const std::string &resource)
     }
 
     // Still-queued tasks of the stopped generation are cancelled: their
-    // completions must never run (plan §14). Running ones are dropped at
+    // completions must never run. Running ones are dropped at
     // delivery by the generation check in pump().
     std::lock_guard<std::mutex> lock(impl_->queue_mutex);
     for (auto it = impl_->tasks.begin(); it != impl_->tasks.end();)

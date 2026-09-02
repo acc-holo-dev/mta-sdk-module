@@ -1,12 +1,12 @@
 #pragma once
 
-// Borrowed state view (plan §18/§45 -- the LuaView half of the value model).
+// Borrowed state view -- the LuaView half of the value model.
 //
 // mta::state wraps the CURRENT lua_State for synchronous operations: reading
 // typed arguments, pushing results, asking which resource owns the VM. It
 // never owns the VM and must never be cached or moved across threads: a
 // resource's VM dies when the resource stops and a restarted resource runs
-// in a fresh VM (plan §14). Values that travel across async boundaries use
+// in a fresh VM. Values that travel across async boundaries use
 // the owned Snapshot model instead (mta::lua::{Argument, Table, Arguments}).
 //
 //     MTA_FUNCTION("describe", "Describes the calling resource.")
@@ -26,7 +26,7 @@
 
 namespace mta
 {
-// Borrowed, non-owning view of a Lua 5.1 VM (plan §18: LuaView).
+// Borrowed, non-owning view of a Lua 5.1 VM (LuaView).
 class state
 {
 public:
@@ -76,7 +76,7 @@ public:
     // Number of call arguments (values on the stack).
     [[nodiscard]] int arg_count() const noexcept { return lua_gettop(lua_vm_); }
 
-    // Typed argument readers (plan §18: the LuaView is the synchronous read
+    // Typed argument readers (the LuaView is the synchronous read
     // surface) -- the same conversions and error messages as the free
     // mta::lua::check_*/opt_* helpers in sdk/lua/stack.hpp. Indices follow
     // Lua conventions: 1-based, negatives count from the top.
@@ -109,14 +109,14 @@ private:
 };
 } // namespace mta
 
-// Plan §18 spells the borrowed model "LuaView": mta::LuaView is the same type
+// The borrowed model is also spelled "LuaView": mta::LuaView is the same type
 // as mta::state (the facade name), kept as an alias so both vocabularies work.
 namespace mta
 {
 using LuaView = state;
 } // namespace mta
 
-// The calling VM as a state view (plan §18): expression form, name the view
+// The calling VM as a state view: expression form, name the view
 // yourself. The view is borrowed -- it dies with the call:
 //
 //     mta::state s = MTA_STATE(L);

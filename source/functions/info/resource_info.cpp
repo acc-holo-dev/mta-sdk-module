@@ -1,4 +1,4 @@
-// Native MTA types (plan §17): the safe Resource wrapper. The module ABI
+// Native MTA types: the safe Resource wrapper. The module ABI
 // exposes no element/player API, so these samples cover what is safely
 // representable: live resource lookup by name and the calling resource.
 //

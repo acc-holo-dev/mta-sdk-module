@@ -1,4 +1,4 @@
-# Module project configuration вЂ” the single source of truth (plan В§4/В§5).
+# Module project configuration ” the single source of truth.
 #
 # The CMake build reads this file directly (config/cmake/core/module-config.cmake);
 # the `mta` CLI reads the same file. Module identity (name, title, author,

@@ -100,7 +100,7 @@ bool initialize(ILuaModuleManager10 *manager, char *module_name, char *author, f
     mta::async::Scheduler::instance().start();
 
     const char *server_version = manager->GetVersionString();
-    // Load diagnostics carry the four §38 version entities separately, each
+    // Load diagnostics carry the four version entities separately, each
     // labelled: SDK version, Module version, module ABI version and the
     // runtime MTA server version. The InitModule float (module_details.
     // version) stays Module-version-only -- that is the whole surface the

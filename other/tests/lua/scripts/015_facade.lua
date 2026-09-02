@@ -1,5 +1,5 @@
 -- <mta/sdk.hpp> facade: MTA_FUNCTION registers a lambda under EXACTLY the
--- developer-provided name (plan §2: no prefixes, no namespaces), with or
+-- developer-provided name (no prefixes, no namespaces), with or
 -- without a description.
 
 test_assert(sample_hello("World") == "Hello, World", "facade function returns greeting")
@@ -24,7 +24,7 @@ test_assert(err2 == "bad argument #1 to 'sample_hello' (expected string, got no 
             "missing-argument error message")
 
 -- MTA_STATE / mta::state: the borrowed state view over the calling VM
--- (plan §18); synchronous use only.
+--; synchronous use only.
 local view = sample_state()
 test_assert(type(view) == "table" and view.resource == "test_resource",
             "mta::state reports the calling resource")

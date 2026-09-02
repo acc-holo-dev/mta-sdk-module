@@ -1,9 +1,9 @@
 name: Release
 
 # Attaches ready-to-use module binaries to a GitHub Release whenever a
-# version tag (v*) is pushed (plan PHASE 14). Release artifacts are exactly
+# version tag (v*) is pushed. Release artifacts are exactly
 # the module binaries — <module-name>.dll / <module-name>.so — nothing else
-# ships (plan §36). Every target builds, passes the test suites, runs the
+# ships. Every target builds, passes the test suites, runs the
 # integration harness where the pinned-server environment allows, packages
 # via `mta package --release-name` (dist/<module>.dll/.so + sha256) and
 # publishes. Publish is a sequential step: it runs only when every prior
@@ -71,10 +71,10 @@ jobs:
       - name: Test (unit + lua)
         run: python other/tools/mta/cli.py test --preset ${{ matrix.preset }} all
 
-      # Plan PHASE 14 pipeline runs integration before packaging. The pinned
+      # The pipeline runs integration before packaging. The pinned
       # MTA server build is Windows-only (other/server/: platform "windows",
       # MTA Server64.exe, msiexec-provisioned 7-Zip), so the harness can run
-      # on the MinGW target — the environment §37's "relevant integration
+      # on the MinGW target — the environment's "relevant integration
       # tests" allows (it builds the module via the default win-mingw preset).
       # The step is blocking: a failure here stops packaging and publishing.
       - name: Integration (real server, blocking)

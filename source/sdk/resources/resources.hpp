@@ -1,7 +1,7 @@
 #pragma once
 
 // Per-resource state with automatic cleanup, and the ResourceContext identity
-// (plan §11): every resource has a generation that increments on every stop.
+//: every resource has a generation that increments on every stop.
 //
 // Every MTA resource lives in its own VM, and that VM dies when the resource
 // stops. Everything the module stores per resource must be reset in
@@ -21,7 +21,7 @@
 // Use only from module functions (main thread, live VM): the store
 // determines the calling resource through the module manager.
 //
-// Generation rule (plan §11/§12/§14): a resource named "test" runs under
+// Generation rule: a resource named "test" runs under
 // generation N; after a restart it runs under generation N+1 with a FRESH
 // VM. Callbacks, async tasks and timers record the generation they were
 // created in and are never allowed to operate across generations -- stale

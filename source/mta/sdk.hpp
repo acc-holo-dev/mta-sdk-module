@@ -1,7 +1,7 @@
 #pragma once
 
 // ===========================================================================
-// <mta/sdk.hpp> -- the public facade of the MTA Module SDK (plan §42/§43).
+// <mta/sdk.hpp> -- the public facade of the MTA Module SDK.
 //
 // This is the ONLY header a module developer normally needs:
 //
@@ -19,7 +19,7 @@
 // Exported here (additions land together with their subsystem):
 //   MTA_FUNCTION / MTA_LUA_FUNCTION / MTA_LUA_FUNC   -- function registration
 //   MTA_STATE / mta::state (mta::LuaView)            -- borrowed Lua state
-//                                                    --   view (plan §18)
+//                                                    --   view
 //   mta::lua::args / push_results / raise_error      -- values & errors
 //   mta::lua::{Argument, Table, Arguments}           -- snapshots (async-safe)
 //   mta::lua::{check_*, opt_*}                       -- manual stack access
@@ -60,13 +60,13 @@
 
 // ===========================================================================
 // Facade-level conveniences: thin, read-only helpers that keep developer code
-// away from the internal singletons (plan §42).
+// away from the internal singletons.
 // ===========================================================================
 namespace mta
 {
-// Introspection (plan §9): the functions registered by this module with
+// Introspection: the functions registered by this module with
 // their signature metadata, read-only. The Registry singleton itself stays
-// internal (plan §42) -- developer code goes through this view.
+// internal -- developer code goes through this view.
 [[nodiscard]] inline const std::vector<::mta::registry::Spec> &registered_functions()
 {
     return ::mta::registry::Registry::instance().functions();

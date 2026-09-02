@@ -1,5 +1,5 @@
 // userdata/metatables: a counter object with get/set/add methods and __gc.
-// The type identity is declared with MTA_OBJECT (plan §16): stable,
+// The type identity is declared with MTA_OBJECT: stable,
 // compiler-independent, module-aware ("mta.<module>.counter").
 //
 //     local c = counter_create(42)

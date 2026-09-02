@@ -6,7 +6,7 @@
 // calling luaL_error directly, so local C++ objects are destroyed properly on
 // bad arguments. The push helpers grow the stack safely via lua_checkstack.
 //
-// Error format (plan §7): while a registered module function runs, argument
+// Error format: while a registered module function runs, argument
 // errors carry its name --
 //
 //     bad argument #2 to 'sum' (expected number, got no value)
@@ -90,7 +90,7 @@ namespace detail
 
 // "bad argument #N to 'name' (DETAIL)" for a native object reference the
 // server cannot resolve right now (e.g. an unknown or already stopped
-// resource) -- a well-typed value that names no living entity (plan §17).
+// resource) -- a well-typed value that names no living entity.
 [[noreturn]] inline void bad_argument_object(int index, const char *detail_text)
 {
     if (const char *name = current_function_name())

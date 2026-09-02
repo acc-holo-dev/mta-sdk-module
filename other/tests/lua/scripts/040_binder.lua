@@ -25,7 +25,7 @@ test_assert(a == 1 and b == "x" and c == true, "rest_args roundtrip")
 local n, t1, t2 = sample_stack_dump(1, "x")
 test_assert(n == 2 and t1 == "number" and t2 == "string", "raw stack dump")
 
--- typing errors straight from the signature (plan §7 format)
+-- typing errors straight from the signature (documented format)
 local ok, err = pcall(sample_greet, {})
 test_assert(not ok, "non-string raises")
 test_assert(err == "bad argument #1 to 'sample_greet' (expected string, got table)",
@@ -41,7 +41,7 @@ local ok3, err3 = pcall(sample_minmax, 5)
 test_assert(not ok3 and string.find(err3, "got no value", 1, true) ~= nil,
             "missing required argument reports typed error")
 
--- typed rest_args / context binder parameters (plan §6): the binder reads
+-- typed rest_args / context binder parameters: the binder reads
 -- them itself, no body-style hand reading involved
 test_assert(sample_rest_count("a", "b", "c") == 3, "typed rest_args counts the tail")
 test_assert(sample_rest_count() == 0, "typed rest_args with an empty tail")

@@ -3,7 +3,7 @@
 // userdata/metatables: objects with methods and automatic memory release.
 //
 // A type is declared ONCE with a stable, compiler-independent identity and
-// registered with the module name prefix (plan §16):
+// registered with the module name prefix:
 //
 //     struct Counter { double value = 0; };
 //
@@ -40,7 +40,7 @@
 // explicit name falls back to a compiler-dependent identity and logs a
 // warning -- use MTA_OBJECT in new code.
 //
-// Introspection (plan §9/§10): every MTA_METHOD call records the method's
+// Introspection: every MTA_METHOD call records the method's
 // name and derived signature (self excluded) into MethodInfo records; types
 // named with MTA_OBJECT are listed in mta::userdata::object_types(). The
 // docs generator (other/tools/docgen.cpp) materializes the types in a
@@ -59,7 +59,7 @@
 
 namespace mta::userdata
 {
-// Method metadata recorded at every MTA_METHOD call (plan §9): the self
+// Method metadata recorded at every MTA_METHOD call: the self
 // parameter is not part of the signature. Consumed by the docs generator
 // (other/tools/docgen.cpp) and future tooling; independent of any VM.
 struct MethodInfo
@@ -69,7 +69,7 @@ struct MethodInfo
 };
 
 // Introspection handle for one object type declared with MTA_OBJECT
-// (plan §10): tooling without a VM lists the methods registered through
+//: tooling without a VM lists the methods registered through
 // MTA_METHOD through it. `materialize` runs the lazy metatable + method
 // registration in the given VM; `methods` returns the recorded metadata.
 struct ObjectTypeInfo
@@ -80,7 +80,7 @@ struct ObjectTypeInfo
 };
 
 // (internal) registration path; the public object_types() below stays
-// read-only (plan §10: introspection never mutates the registry).
+// read-only (introspection never mutates the registry).
 [[nodiscard]] inline std::vector<ObjectTypeInfo> &object_types_mutable() noexcept
 {
     static std::vector<ObjectTypeInfo> types;
@@ -89,7 +89,7 @@ struct ObjectTypeInfo
 
 // Every object type registered through MTA_OBJECT in this process, in
 // registration order. Types without an explicit MTA_OBJECT name are not
-// listed: their identity would be compiler-dependent (plan §16).
+// listed: their identity would be compiler-dependent.
 [[nodiscard]] inline const std::vector<ObjectTypeInfo> &object_types() noexcept
 {
     return object_types_mutable();
@@ -102,12 +102,12 @@ public:
     // Function that registers the type's methods (called once per VM).
     using Registrar = void (*)(lua_State *);
 
-    // Sets the explicit type identity (plan §16): stable, deterministic,
+    // Sets the explicit type identity: stable, deterministic,
     // compiler-independent. Returns true (usable as a static initializer,
     // which is what the MTA_OBJECT macro does). The first call wins; later
     // conflicting calls are a programming error and are ignored with a log.
     // The first successful naming also lists the type in object_types()
-    // (plan §10).
+    //.
     static bool set_type_name(const char *name)
     {
         if (name == nullptr || *name == '\0')
@@ -209,7 +209,7 @@ public:
         return static_cast<T *>(lua_touserdata(L, index));
     }
 
-    // Method metadata recorded at MTA_METHOD calls (plan §9/§10), in
+    // Method metadata recorded at MTA_METHOD calls, in
     // registration order. The registrar runs once per VM that uses the
     // type, so records are deduplicated by name.
     [[nodiscard]] static const std::vector<MethodInfo> &method_list() noexcept
@@ -223,7 +223,7 @@ public:
     {
         method_holder<Tag, F>::fn = std::move(fn);
         method_holder<Tag, F>::registered_name = name;
-        // Metadata for the docs generator (plan §10): derived from F with
+        // Metadata for the docs generator: derived from F with
         // the self parameter skipped; recording is independent of the VM.
         record_method(name, mta::lua::detail::method_signature_of<F>());
 
@@ -238,7 +238,7 @@ public:
     }
 
 private:
-    // Adds this type to the process-wide introspection list (plan §10): the
+    // Adds this type to the process-wide introspection list: the
     // docs generator lists object methods through it. Called once, by
     // set_type_name on the first successful naming -- the registrar may not
     // be set yet; the stored callbacks read the current state at call time.
@@ -269,7 +269,7 @@ private:
         return records;
     }
 
-    // Records one method's metadata for tooling (plan §10). Deduplicated by
+    // Records one method's metadata for tooling. Deduplicated by
     // name: ensure() runs the registrar in every VM that uses the type.
     static void record_method(const char *name, mta::lua::Signature signature)
     {
@@ -285,7 +285,7 @@ private:
                                      std::move(signature)});
     }
 
-    // The metatable identity (plan §16): module-aware, deterministic, and
+    // The metatable identity: module-aware, deterministic, and
     // stable when the type name was declared with MTA_OBJECT. Computed once
     // per process; the module name never changes after initialization.
     static const char *identity()
@@ -330,7 +330,7 @@ private:
         {
             // Name the running method and record the resource: argument
             // errors render "bad argument #2 to 'set' (expected number, got
-            // string)" and log messages carry the call site (plan §20).
+            // string)" and log messages carry the call site.
             return mta::lua::protected_call_named(L, &method_holder<Tag, F>::call, registered_name);
         }
 
@@ -376,7 +376,7 @@ private:
 } // namespace mta::userdata
 
 // Declares an object type with a stable, compiler-independent identity
-// (plan §16): MTA_OBJECT("counter", Counter) -- at namespace scope. The
+//: MTA_OBJECT("counter", Counter) -- at namespace scope. The
 // macro carries its own semicolon.
 #define MTA_OBJECT(Name, Type) \
     static const bool mta_object_registered_##Type = \

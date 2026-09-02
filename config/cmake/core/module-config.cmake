@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
 # ---------------------------------------------------------------------------
-# Minimal TOML reader for config/module.toml (plan PROMT.md §4).
+# Minimal TOML reader for config/module.toml.
 #
 # Supports the pragmatic subset the project configuration needs:
 #   - [section] headers (dots in section names map to underscores);

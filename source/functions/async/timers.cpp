@@ -1,7 +1,7 @@
 // Timers: callback(tick) fires on the main thread every delay_ms,
 // repeat_count times (0 = until cancelled). Built on the developer-facing
-// timer API (mta::timer::every, plan §15) -- the scheduler stays internal
-// (plan §42). The timer is tied to the calling resource and is cancelled
+// timer API (mta::timer::every) -- the scheduler stays internal
+//. The timer is tied to the calling resource and is cancelled
 // automatically when that resource stops.
 
 #include <mta/sdk.hpp>

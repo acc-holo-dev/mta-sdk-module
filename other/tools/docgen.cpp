@@ -1,4 +1,4 @@
-// Registry documentation generator (plan §9/§10/§24): dumps every module
+// Registry documentation generator: dumps every module
 // function registered through MTA_FUNCTION/MTA_LUA_FUNCTION and every object
 // type registered through MTA_OBJECT with its methods as readable markdown.
 // Consumed by `mta docs`.
@@ -10,7 +10,7 @@
 // their metadata is recorded compiler-independently at every MTA_METHOD call.
 //
 // Information that cannot be derived automatically is marked explicitly
-// (plan §10): the category of a module function (no registration spelling
+//: the category of a module function (no registration spelling
 // provides one yet), per-function error lists (not part of the signature
 // metadata) and the methods of types declared without MTA_OBJECT
 // (compiler-dependent identity, not listed).
@@ -89,7 +89,7 @@ std::string flags_text(std::uint32_t flags)
 }
 
 // The metadata block shared by module functions and object methods (plan
-// §9/§10): argument types with optional markers, return types, category,
+// metadata): argument types with optional markers, return types, category,
 // flags -- and explicit markers for everything not derivable.
 void print_call_metadata(const mta::lua::Signature &signature, const char *category,
                          std::uint32_t flags)
@@ -138,7 +138,7 @@ void print_call_metadata(const mta::lua::Signature &signature, const char *categ
     }
     std::printf("- flags: %s\n", flags_text(flags).c_str());
     std::printf("- errors: n/a (raised errors are not part of the signature metadata; the binder "
-                "converts them to Lua errors, plan §19)\n");
+                "converts them to Lua errors)\n");
 }
 
 void print_function(const mta::registry::Spec &fn)
@@ -158,7 +158,7 @@ void print_function(const mta::registry::Spec &fn)
     {
         std::printf("```\n%s(...)\n```\n\n", fn.name);
         std::printf("Signature not derived: body-style registration reads its arguments "
-                    "itself (plan §9).\n\n");
+                    "itself.\n\n");
     }
     else
     {
@@ -191,7 +191,7 @@ int main()
         print_function(fn);
     }
 
-    // Object methods (plan §10): registered through MTA_METHOD into per-type
+    // Object methods: registered through MTA_METHOD into per-type
     // metatables, so a scratch VM materializes the declared types first. The
     // vendored Lua is MTA's patched 5.1: luaL_newstate takes the state's
     // owner (mtasaowner) -- nullptr for a module-owned state.
@@ -237,7 +237,7 @@ int main()
             std::printf("### %s\n\n", qualname.c_str());
             std::printf("_(no description: MTA_METHOD does not carry one)_\n\n");
             std::printf("```\n%s\n```\n\n", signature_text(qualname, method.signature).c_str());
-            // The object type groups the method (plan §9: category).
+            // The object type groups the method (category).
             print_call_metadata(method.signature, object.type.c_str(), method.signature.flags);
             std::printf("\n");
         }

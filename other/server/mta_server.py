@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MTA server test harness (plan PROMT.md §30-§33).
+"""MTA server test harness.
 
 Manages a PINNED, locally-installed MTA:SA server for integration tests:
 
@@ -14,7 +14,7 @@ Manages a PINNED, locally-installed MTA:SA server for integration tests:
 
 The integration test suite itself lives in other/tests/integration/:
 
-    main_resource.lua      the "sdkintegration" resource: every §32 scenario
+    main_resource.lua      the "sdkintegration" resource: every scenario
                            reports its own "SCENARIO <name>: PASS|FAIL"
                            marker; three generations are choreographed by
                            this harness (stop/start cycle, console restart)
@@ -22,8 +22,8 @@ The integration test suite itself lives in other/tests/integration/:
                            witness that never restarts
 
 The harness parses the scenario markers, drives the resource lifecycle
-(stop -> start -> restart) through the server console, requires every §32
-scenario plus the §33 stale-generation regression to report PASS, fails on
+(stop -> start -> restart) through the server console, requires every
+scenario plus the stale-generation regression to report PASS, fails on
 any stale-delivery marker, and adds the two harness-side scenarios (module
 unload at graceful shutdown, shutdown with active workers).
 
@@ -61,7 +61,7 @@ INSTALL_JSON = SERVER_DIR / "install.json"
 PID_JSON = SERVER_DIR / "server.pid"
 LOGS_DIR = SERVER_DIR / "logs"
 
-# Pinned server build (plan §30: never "latest"; the exact identity below is
+# Pinned server build (never "latest"; the exact identity below is
 # what the harness installs and what install.json records). Windows x64
 # server, 1.6 release line, nightly.mtasa.com.
 PINNED = {
@@ -76,7 +76,7 @@ PINNED = {
 
 # NSIS extraction tool. The MTA installer ignores /D when an MTA install is
 # already registered on the machine (it would touch the developer's global
-# installation, which §31 forbids), so the harness unpacks the installer's
+# installation), so the harness unpacks the installer's
 # payload directly with a locally provisioned 7-Zip. The .msi is unpacked
 # with `msiexec /a` (an administrative image: plain file extraction, no
 # elevation), because the .exe installer's manifest requires elevation.
@@ -98,9 +98,9 @@ MARK_RESULT = "INTEGRATION_RESULT:"
 
 # Generational choreography markers printed by the Lua suite (one each):
 #   STOP_NOW      generation 1 is done -> harness stops + starts the resource
-#                 (the dedicated §32 resource stop/start cycle)
+#                 (the dedicated resource stop/start cycle)
 #   RESTART_NOW   generation 2 is done -> harness restarts the resource
-#                 (console restart; §33 regression cycle)
+#                 (console restart; the stale-generation regression cycle)
 #   RUN_COMPLETE  generation 3 is done -> harness performs the graceful
 #                 shutdown (with an active worker still pending)
 MARK_STOP_NOW = "STOP_NOW"
@@ -117,7 +117,7 @@ NEGATIVE_MARKERS = (
     "SHOULD_NEVER_FIRE",
 )
 
-# Every §32 scenario plus the automatic §33 regression (plan §32/§33). Each
+# Every scenario plus the automatic stale-generation regression. Each
 # of these must be reported with its own "SCENARIO <name>: PASS" marker and
 # never with FAIL; "module unload" and "shutdown with active workers" are
 # judged by the harness itself (their observable moment is the shutdown).
@@ -146,7 +146,7 @@ REQUIRED_SCENARIOS = (
 
 SCENARIO_RE = re.compile(r"SCENARIO (.+?): (PASS|FAIL)")
 
-# Delay between the `stop` and `start` console commands of the §32 cycle.
+# Delay between the `stop` and `start` console commands of the stop/start cycle.
 # MTA processes console commands in order, so the start always executes
 # after the stop completes regardless of timing.
 STOP_TO_START_DELAY = 2.0
@@ -388,7 +388,7 @@ def cmd_test(args) -> int:
     if binary is None:
         die("module binary not found after the build")
 
-    # Fresh temporary server directory per run (plan §31), cleaned up after.
+    # Fresh temporary server directory per run, cleaned up after.
     temp_root = Path(tempfile.mkdtemp(prefix="mta-sdk-integration-"))
     server_root = temp_root / "server"
     out(f"Preparing the temporary server directory {server_root} ...")
@@ -625,11 +625,11 @@ def inject_console_text(text: str) -> None:
 
 
 def wait_for_results(process) -> RunResult:
-    """Runs the §32/§33 choreography against the live server console.
+    """Runs the full scenario choreography against the live server console.
 
     Generation markers emitted by the Lua suite drive the harness: STOP_NOW
     -> `stop` + `start` (dedicated resource stop/start cycle), RESTART_NOW ->
-    `restart` (the §33 regression cycle), RUN_COMPLETE -> graceful shutdown
+    `restart` (the stale-generation regression cycle), RUN_COMPLETE -> graceful shutdown
     follows in stop_process. Every scenario marker and every stale-delivery
     marker in the console log is collected into the result.
     """
@@ -663,11 +663,11 @@ def wait_for_results(process) -> RunResult:
             if phase == "gen1" and MARK_STOP_NOW in line:
                 phase = "stopping"
                 stop_sent_at = time.time()
-                out("Generation 1 done; stopping the resource (resource stop/start cycle, plan §32) ...")
+                out("Generation 1 done; stopping the resource (resource stop/start cycle) ...")
                 inject_console_text(f"stop {TEST_RESOURCE_NAME}\r")
             if phase == "gen2" and MARK_RESTART_NOW in line:
                 phase = "gen3"
-                out("Generation 2 done; restarting the resource (plan §33 regression cycle) ...")
+                out("Generation 2 done; restarting the resource (stale-generation regression cycle) ...")
                 inject_console_text(f"restart {TEST_RESOURCE_NAME}\r")
             if phase == "gen3" and MARK_RUN_COMPLETE in line:
                 phase = "done"
@@ -679,7 +679,7 @@ def wait_for_results(process) -> RunResult:
             dump_tail(result.tail)
             return result
 
-        # The stop->start transition of the §32 cycle. Console commands are
+        # The stop->start transition of the stop/start cycle. Console commands are
         # processed in order, so this start always follows the completed stop.
         if (
             phase == "stopping"
@@ -748,8 +748,7 @@ def finalize_run(result: RunResult, console_log: Path) -> int:
 
     ok = not result.failed and result.run_complete
 
-    # Negative markers anywhere in the log fail the run (plan §14/§15/§33:
-    # stale objects must never deliver into a fresh generation).
+    # Negative markers anywhere in the log fail the run (# stale objects must never deliver into a fresh generation).
     for line in result.tail:
         for marker in NEGATIVE_MARKERS:
             if marker in line and marker not in result.negative:
@@ -780,7 +779,7 @@ def finalize_run(result: RunResult, console_log: Path) -> int:
         ok = False
         out("FAILED: an INTEGRATION_RESULT reported FAIL")
 
-    out("Scenarios covered (§32 + §33):")
+    out("Scenarios covered:")
     for name in REQUIRED_SCENARIOS:
         verdicts = result.scenarios.get(name, [])
         if verdicts and all(verdicts):
@@ -797,7 +796,7 @@ def finalize_run(result: RunResult, console_log: Path) -> int:
 
     if ok:
         out(
-            "All integration scenarios passed (19 §32 scenarios + §33 regression; "
+            "All integration scenarios passed (19 scenarios + the stale-generation regression; "
             "stale generations isolated, clean shutdown with active workers)"
         )
         return 0
@@ -821,7 +820,7 @@ def stop_process(process) -> tuple[bool, int | None]:
         if process.poll() is None:
             inject_console_text("exit\r")
             # A shutdown worker may still be running: the SDK joins active
-            # workers in ShutdownModule (plan §13 "safe shutdown"), so the
+            # workers in ShutdownModule (safe shutdown), so the
             # graceful window must outlast the 60 s scenario worker.
             try:
                 process.wait(timeout=120)

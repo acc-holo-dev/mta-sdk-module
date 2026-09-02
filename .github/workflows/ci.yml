@@ -130,7 +130,7 @@ jobs:
         run: python other/tools/mta/cli.py doctor
 
   integration:
-    # Plan PHASE 13: run the real-server integration where the environment
+    # Run the real-server integration where the environment
     # allows. The harness drives a pinned Windows MTA server build
     # (mtasa-24140, other/server/ — platform "windows", MTA Server64.exe),
     # so this job runs on a Windows runner with the MinGW toolchain and the
@@ -155,7 +155,7 @@ jobs:
       # The CLI/harness run through the runner's native Python (the MSYS2
       # environment has no Python); the MinGW toolchain the build needs comes
       # from the UCRT64 environment and is put on PATH -- the same layout the
-      # release workflow uses (plan PHASE 14).
+      # release workflow uses.
       - name: Put the MinGW toolchain on PATH
         shell: pwsh
         run: Add-Content $env:GITHUB_PATH 'C:\msys64\ucrt64\bin'

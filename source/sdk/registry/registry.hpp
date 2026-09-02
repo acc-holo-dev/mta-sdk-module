@@ -40,15 +40,15 @@ struct Spec
     module_function function;
 
     // Derived for lambda-style registrations; empty (derived == false) for
-    // body-style ones -- plan §9: underivable metadata is stated explicitly.
+    // body-style ones -- underivable metadata is stated explicitly.
     mta::lua::Signature signature{};
 
     // Free-form grouping; empty unless a future registration spelling
     // provides it. The docs generator marks the empty value as "n/a"
-    // (plan §10: underivable information is stated explicitly).
+    // (underivable information is stated explicitly).
     std::string category{};
 
-    // Binder capabilities derived from the C++ signature (plan §9):
+    // Binder capabilities derived from the C++ signature:
     // mta::lua::function_flag_* bits (variadic tail, Lua function
     // parameter); 0 for body-style registrations. Copied from
     // Signature::flags by the registration bridge.
@@ -91,9 +91,9 @@ private:
 // MTA_LUA_FUNCTION("name", "description") { body; arguments via args<...> }
 #define MTA_LUA_FUNCTION(Name, Description)     MTA_LUA_FUNCTION_IMPL((Name), (Description), __COUNTER__)
 
-// --- plan facade spelling ------------------------------------------------------
+// --- developer-facing facade spelling ------------------------------------------------------
 
-// MTA_FUNCTION is the developer-facing registration macro (plan §6): the
+// MTA_FUNCTION is the developer-facing registration macro: the
 // function is registered under EXACTLY the given name -- the SDK never adds
 // prefixes or namespaces.
 //

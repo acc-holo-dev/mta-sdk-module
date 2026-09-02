@@ -30,7 +30,7 @@ test_assert(sample_tag("x", nil) == "x/none", "explicit nil -> nullopt")
 local ok3, err3 = pcall(sample_minmax, 5)
 test_assert(not ok3, "missing required argument raises")
 test_assert(err3 == "bad argument #2 to 'sample_minmax' (expected number, got no value)",
-            "missing arg message (plan §7)")
+            "missing arg message")
 
 -- cancelling a nonexistent timer
 test_assert(sample_timer_cancel(999999) == false, "cancel nonexistent timer returns false")

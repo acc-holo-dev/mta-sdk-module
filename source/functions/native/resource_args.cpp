@@ -1,4 +1,4 @@
-// Native MTA types as typed binder arguments (plan §6/§17): mta::Resource is
+// Native MTA types as typed binder arguments: mta::Resource is
 // accepted BY NAME and validated live through the module manager ABI -- an
 // unknown or already stopped resource is a readable argument error, never a
 // dangling wrapper. The same wrapper is also a result type: it is pushed to

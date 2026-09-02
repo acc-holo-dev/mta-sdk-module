@@ -1,6 +1,6 @@
 #pragma once
 
-// Developer-facing async task handle (plan §13).
+// Developer-facing async task handle.
 //
 //     auto task = mta::async::run(L, work, completion);
 //     task.cancel();   // the completion will never run
@@ -10,7 +10,7 @@
 // A Task is a light shared handle: copies share the state. Cancellation is
 // cooperative -- running work cannot be interrupted, but its completion is
 // suppressed, so a cancelled task never touches Lua. Tasks are owned by the
-// resource that posted them (plan §14): when that resource stops, queued
+// resource that posted them: when that resource stops, queued
 // tasks are cancelled and completions of a finished generation are dropped
 // before any Lua access.
 

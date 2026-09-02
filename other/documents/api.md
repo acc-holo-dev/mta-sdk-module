@@ -47,7 +47,7 @@ the live example of every API in this document.
 Registration happens at static-init time — any `.cpp` under `source/` is
 picked up by the build; no lists to maintain.
 
-### `MTA_FUNCTION` (recommended, plan §6)
+### `MTA_FUNCTION` (recommended)
 
 ```cpp
 // Without a description:
@@ -113,7 +113,7 @@ structured-binding sugar). Supported parameter types:
 | `mta::lua::rest_args` | all remaining values, last parameter only |
 | `mta::lua::context` | the VM and the calling resource name; consumes **no** Lua argument |
 | `mta::async::Callback` | function (a stable reference, see below) |
-| `mta::Resource` | name of a **running** resource; strict string, validated live (plan §17) |
+| `mta::Resource` | name of a **running** resource; strict string, validated live |
 
 ```cpp
 MTA_LUA_FUNCTION("sample_join", "Joins values with a separator.")
@@ -175,7 +175,7 @@ MTA_FUNCTION("stats", "Min, max and count.", [](std::vector<double> v) {
   destroyed first). **C++ exceptions never leak into Lua.**
 * `mta::errors::raise_error(Category, ...)` — the categorized form used
   internally.
-* Format rules (plan §7): while a registered function runs, argument errors
+* Format rules: while a registered function runs, argument errors
   carry its name —
 
   ```text
@@ -207,8 +207,8 @@ cross the async boundary — a background worker never touches `lua_State`.
 
 ## The borrowed state view: mta::state / MTA_STATE
 
-`mta::state` is the **View** half of the value model (plan §18 spells the
-model "LuaView"; `mta::LuaView` is an alias for the same type): a borrowed,
+`mta::state` is the **View** half of the value model (the borrowed model is
+spelled "LuaView"; `mta::LuaView` is an alias for the same type): a borrowed,
 non-owning wrapper around the **current** VM, valid only for the synchronous
 call that created it. Where the snapshots above own copies of values so they
 can survive the async boundary, `mta::state` is the convenience read/write
@@ -239,7 +239,7 @@ Methods (each mirrors the free function of the same name — see
 The rule that makes the View safe: **never store it and never carry it
 anywhere** — not into a later call, not across threads, not into async
 work. A resource's VM dies when the resource stops and a restart runs a
-fresh VM (plan §14). The only values allowed to cross the async boundary
+fresh VM. The only values allowed to cross the async boundary
 are the owned snapshots `mta::lua::{Argument, Table, Arguments}` (see
 [Value snapshots](#value-snapshots-argument--table--arguments)).
 
@@ -309,7 +309,7 @@ mta::log::debug("outside a VM context");           // overload without L
 Levels: `Debug < Info < Warn < Error < Off`; a message prints when its
 level ≥ the current level.
 
-**Automatic context (plan §20).** The framework prefixes every message with
+**Automatic context.** The framework prefixes every message with
 the parts it knows about the current call site — developers never pass them.
 The module identity is always known; the running function, the task/timer id
 and the owning resource come from the thread-local diagnostic context that
@@ -356,7 +356,7 @@ task.valid();    // true while the handle refers to a live task
 task.id();       // scheduler id (0 on an invalid handle)
 ```
 
-Ownership rules (plan §13/§14):
+Ownership rules:
 
 * `run(L, work, completion)` attributes the task to the **calling resource
   and its VM generation**.
@@ -391,7 +391,7 @@ callback.call(args);   // false when the resource is gone, the callback is
 Identity is `(resource, generation, ref)`: a stopped resource never fires;
 a restarted resource's fresh VM can never execute a callback of the older
 generation even when the new registry hands out the same `luaL_ref` index
-(this exact bug existed in V1 — plan §33 regression `072_restart.lua`).
+(this exact bug existed in V1; the regression lives in `072_restart.lua`).
 
 Move-only; wrap in `std::shared_ptr` when captured into `std::function`
 completions.
@@ -445,7 +445,7 @@ is determined through the module manager; it cannot be determined →
 `raise_error`. `try_find(name)` reads another resource's data without
 creating it.
 
-Generations (plan §11/§12/§14): `mta::resources::Hub::generation(name)` is 1
+Generations: `mta::resources::Hub::generation(name)` is 1
 for a never-stopped resource and increments on every stop/restart cycle.
 Callbacks, tasks and timers record the generation they were created in and
 never operate across generations.
@@ -486,7 +486,7 @@ c:add(8)   -- 50
 c = nil    -- __gc calls ~Counter()
 ```
 
-Rules (plan §16):
+Rules:
 
 * `MTA_OBJECT("name", T)` declares the type identity once; the metatable is
   `mta.<module>.<name>` — module-aware, so two modules cannot collide.
@@ -542,7 +542,7 @@ if (auto self = mta::Resource::current(L))
 stopped resource reports `nullptr`/`alive() == false`. Samples:
 `sample_resource_name`, `sample_resource_find`.
 
-### `mta::Resource` as a typed binder argument/result (plan §6/§17)
+### `mta::Resource` as a typed binder argument/result
 
 `mta::Resource` is a full binder parameter: Lua names the resource, and the
 binder resolves the name through `Resource::find` on every call. An unknown
@@ -579,7 +579,7 @@ The signature metadata reports the type as `resource` (see
 `config/module.toml`, compiled into the binary. `current_resource_name(L)`
 is the ABI-safe resource lookup used by `context`, `Store` and `Callback`.
 
-### The four versions (plan §38)
+### The four versions
 
 Four version entities are kept strictly separate. The two SDK-side ones have
 a single source — `source/sdk/version.hpp` — whose values are never
@@ -625,7 +625,7 @@ functions.
 
 ## Configuration: config/module.toml
 
-The single source of truth (plan §4/§5) — read by CMake and the CLI:
+The single source of truth — read by CMake and the CLI:
 
 ```toml
 [module]
@@ -670,7 +670,7 @@ objects = true
 |---|---|
 | `mta doctor` | Environment readiness: TOML validity + identity, SDK headers, Lua ABI byte-compare, toolchain probes, presets, build output, git state. Prints READY/NOT READY. |
 | `mta build [preset]` | CMake configure+build of the configured/default preset. |
-| `mta test all\|unit\|lua\|integration` | `ctest` filters; `integration` runs the real-server harness (PHASE 11). |
+| `mta test all\|unit\|lua\|integration` | `ctest` filters; `integration` runs the real-server harness  |
 | `mta docs` | Builds `sdk_docgen` and dumps registry metadata (name, description, derived signature with argument/return types and optional markers, category/flags where derivable, explicit `n/a` markers, object methods) as markdown. |
 | `mta package` | Copies the module binary into `dist/<name>-<version>-<platform>` + sha256. |
 | `mta server install\|update\|version\|start\|stop\|test` | Pinned MTA server harness (isolated install, real-server integration). |

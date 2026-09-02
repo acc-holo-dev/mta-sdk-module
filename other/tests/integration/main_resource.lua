@@ -1,4 +1,4 @@
--- Integration test suite for the real-server harness (plan PROMT.md §32/§33).
+-- Integration test suite for the real-server harness.
 --
 -- Installed by other/server/mta_server.py as the resource "sdkintegration".
 -- Every scenario reports its own marker line, which the harness parses from
@@ -10,7 +10,7 @@
 -- The harness choreographs three generations of this resource through the
 -- server console:
 --
---   generation 1  auto-start      function-level scenarios + §33 arming
+--   generation 1  auto-start      function-level scenarios + stale-gen arming
 --            -> INTEGRATION: STOP_NOW     harness: stop sdkintegration
 --   generation 2  stop + start    resource stop/start + stale windows
 --            -> INTEGRATION: RESTART_NOW  harness: restart sdkintegration
@@ -77,7 +77,7 @@ if gen2Done then
 end
 
 -- ===========================================================================
--- generation 1 (auto-start): function-level scenarios + §33 arming
+-- generation 1 (auto-start): function-level scenarios + stale-gen arming
 -- ===========================================================================
 if generation == 1 then
     check("module load",
@@ -122,7 +122,7 @@ if generation == 1 then
     local callbackResult = nil
     sample_async_add(1, 2, function(sum) callbackResult = sum end)
 
-    -- §33 arming (generation 1): a stale async task (8 s) and a stale
+    -- stale-gen arming (generation 1): a stale async task (8 s) and a stale
     -- module-timer callback (10 s) that must never fire after the harness
     -- stops and starts this resource.
     sample_task_run(8000, 0, 0, function()
@@ -160,11 +160,11 @@ if generation == 1 then
 end
 
 -- ===========================================================================
--- generation 2 (after harness stop + start): §33 cycle 1, resource
+-- generation 2 (after harness stop + start): regression cycle 1, resource
 -- stop/start, userdata invalidation, stale windows
 -- ===========================================================================
 if generation == 2 then
-    -- ---- §32: resource stop and resource start as dedicated scenarios ----
+    -- ---- resource stop and resource start as dedicated scenarios ----
     -- (not the implicit stop inside a restart): generation 1's
     -- onResourceStop handler wrote its marker during the stop.
     check("resource stop", gen1Done and gen1StopOk)
@@ -173,14 +173,14 @@ if generation == 2 then
         and type(sample_add) == "function"
         and type(counter_create) == "function")
 
-    -- §32 userdata invalidation across the generation boundary: the
+    -- userdata invalidation across the generation boundary: the
     -- previous generation's userdata value (10) must not leak into this
     -- one, and its timer handle must be dead here (per-VM handle maps).
     local previous = read_file("sdk_gen1_done.txt") or ""
     local staleTimerId = tonumber(string.match(previous, "stale_timer=([%-%d]+)"))
 
     -- The FIRST module callback of this fresh VM occupies the luaL_ref slot
-    -- a stale delivery from generation 1 would collide with (plan §11/§12).
+    -- a stale delivery from generation 1 would collide with.
     -- It must only ever fire from its own 45 s timer -- which never happens:
     -- the resource restarts long before that.
     local sentinel = sample_after(45000, function()
@@ -216,7 +216,7 @@ if generation == 2 then
         check("old callback after restart", gen1Done)
         check("stale generation regression (33)", gen1Done and gen1StopOk)
 
-        -- §33 arming (generation 2, right before the console restart)
+        -- stale-gen arming (generation 2, right before the console restart)
         sample_task_run(8000, 0, 0, function()
             outputServerLog("STALE_TASK_DELIVERED_G2")
         end)
@@ -240,20 +240,20 @@ end
 local previous = read_file("sdk_gen2_done.txt") or ""
 local staleTimerId = tonumber(string.match(previous, "stale_timer=([%-%d]+)"))
 
--- First module callback of this fresh VM: the §33 collision sentinel again
+-- First module callback of this fresh VM: the collision sentinel again
 -- (the same luaL_ref slot generation 2's first callback occupied).
 local sentinel = sample_after(45000, function()
     outputServerLog("STALE_COLLISION_FIRED")
 end)
 
--- §32: resource restart (console restart = stop + start of the same
+-- resource restart (console restart = stop + start of the same
 -- resource; generation 2 stopped cleanly and this VM is fresh).
 check("resource restart",
     gen2Done and gen2StopOk
     and sample_resource_name() == "sdkintegration"
     and type(sample_add) == "function")
 
--- §32: userdata invalidation, now one stop/start AND one restart away from
+-- userdata invalidation, now one stop/start AND one restart away from
 -- the original object.
 local counter = counter_create(2)
 local oldTimerDead = false
@@ -271,14 +271,14 @@ check("userdata invalidation",
 fileDelete("sdk_gen2_done.txt")
 fileDelete("sdk_gen2_stop_ok.txt")
 
--- §32: multiple timers after restart -- three fresh timers, each must fire
+-- multiple timers after restart -- three fresh timers, each must fire
 -- twice inside this generation.
 local ticks1, ticks2, ticks3 = 0, 0, 0
 sample_timer(60, 2, function() ticks1 = ticks1 + 1 end)
 sample_timer(120, 2, function() ticks2 = ticks2 + 1 end)
 sample_timer(180, 2, function() ticks3 = ticks3 + 1 end)
 
--- §32 shutdown with active workers: a 60 s task stays pending when the
+-- shutdown with active workers: a 60 s task stays pending when the
 -- harness stops the server; the module must cancel it cleanly and never
 -- let it fire (harness-side negative check).
 sample_task_run(60000, 0, 0, function()

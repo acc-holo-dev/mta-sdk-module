@@ -19,7 +19,7 @@ struct TrackedRef
     bool dead = false;
     // The VM generation the reference was created in. A fresh VM after a
     // restart can hand out the SAME luaL_ref index; the generation is what
-    // tells the two apart (plan §11/§12).
+    // tells the two apart.
     std::uint64_t generation = 0;
 };
 
@@ -160,7 +160,7 @@ bool Callback::call(const mta::lua::Arguments &arguments) const
         return false; // resource stopped (a restarted one would return a fresh VM)
     }
 
-    // Second line of defense (plan §12): even with a live tracked ref, a
+    // Second line of defense: even with a live tracked ref, a
     // callback of an older generation must never run in the fresh VM of a
     // restarted resource.
     const std::uint64_t current_generation = mta::resources::Hub::instance().generation(resource_);
@@ -173,7 +173,7 @@ bool Callback::call(const mta::lua::Arguments &arguments) const
     }
 
     // Attribute log messages emitted around this call to the callback's
-    // resource (plan §20); restored when the call returns.
+    // resource; restored when the call returns.
     mta::lua::detail::ScopedDiagnosticContext scope{nullptr, 0, 0};
     scope.set_resource(resource_);
 

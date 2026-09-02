@@ -37,12 +37,12 @@ headers are byte-compared against the vendored Lua in the tests).
 config/module.toml          single source of truth (identity/build/features)
 source/mta/sdk.hpp          the public facade (the only include you need)
 source/sdk/                 the framework (internal layers, see §3)
-source/library/             reusable module-agnostic utilities (plan §23)
+source/library/             reusable module-agnostic utilities
 source/functions/           the bundled sample module (your code goes here)
 other/third_party/          vendored Lua 5.1 + MTA SDK headers
 other/tests/                unit tests + embedded-Lua harness + scripts
 other/tools/                the `mta` CLI, docgen, launchers
-other/server/               pinned-server integration harness (PHASE 11)
+other/server/               pinned-server integration harness
 other/documents/            docs, audit, phase reports
 cmake/                      build system modules (module-config, file glob)
 CMakePresets.json           win-msvc / win-mingw / linux-gcc / base
@@ -63,7 +63,7 @@ dependency from `sdk` up into `functions` or `library` is forbidden).
                      │ MTA_FUNCTION / MTA_LUA_FUNCTION / MTA_LUA_FUNC
         ┌────────────▼─────────────┐
         │   library/               │  ← reusable utilities shared by
-        │   (plan §23, see §3.0)   │     several functions
+        │   (see §3.0)             │     several functions
         └────────────┬─────────────┘
         ┌────────────▼─────────────┐
         │   registry/              │  ← collects + registers functions,
@@ -85,7 +85,7 @@ dependency from `sdk` up into `functions` or `library` is forbidden).
         other/third_party/ (Lua 5.1, MTA SDK headers)
 ```
 
-### 3.0 `source/library/` — reusable utilities (plan §23)
+### 3.0 `source/library/` — reusable utilities
 
 Module-agnostic C++ that does not export to Lua directly and can be shared
 by several functions (`library` must never depend on a specific function
@@ -122,8 +122,8 @@ Lambda-style registrations derive a `Signature` (arguments with types and
 optional markers, returns, variadic, capability flags) from the C++
 signature; the flags (`variadic`, `callback`) land in `Spec::flags` through
 the registration bridge. Body-style registrations record `derived == false`
-and say so explicitly (plan §9). Underivable metadata is marked explicitly
-wherever the metadata is rendered (plan §10): the category stays empty (no
+and say so explicitly. Underivable metadata is marked explicitly
+wherever the metadata is rendered: the category stays empty (no
 registration spelling provides one yet → `n/a` in the docs), and per-function
 error lists are not part of the signature metadata at all. `mta docs` dumps
 the function metadata without a module manager; object methods
@@ -136,7 +136,7 @@ the function metadata without a module manager; object methods
 * `lua/common.hpp` — the vendored Lua headers' single include point.
 * `lua/stack.hpp` — type-safe `check_*`/`opt_*` readers that **throw C++
   exceptions** (local objects destroyed properly on bad input) and carry the
-  running function's name in every argument error (plan §7).
+  running function's name in every argument error.
 * `lua/protect.hpp` — exception → Lua error conversion and the
   `protected_call` trampoline every registered function runs through.
 * `lua/argument.hpp` / `arguments.hpp` — `Argument`/`Table`/`Arguments`
@@ -144,7 +144,7 @@ the function metadata without a module manager; object methods
   of the value model and the only values allowed to cross the async
   boundary.
 * `lua/state.hpp` — `mta::state` (alias `mta::LuaView`), the borrowed half
-  of the value model (plan §18/§45): a non-owning wrapper of the
+  of the value model: a non-owning wrapper of the
   **current** `lua_State` for exactly one synchronous call — typed argument
   readers (`args<Ts...>()`, `check_*`/`opt_*`), `top()`, `resource_name()`,
   `push_results(...)` — spelled `MTA_STATE(L)` at the call site.
@@ -154,14 +154,14 @@ the function metadata without a module manager; object methods
   (scalars, tuples, vectors, `optional`, `Arguments`) and integrates native
   types: a `mta::Resource` parameter is resolved by name and validated live
   through the module manager, a returned `Resource` is pushed as its name
-  (plan §6/§17).
+ .
 * `objects/userdata.hpp` — `Registry<T>` + `MTA_OBJECT`/`MTA_METHOD`
   (stable, module-aware metatable identities, `__gc` destructor); every
   method call records its `MethodInfo` metadata and `MTA_OBJECT`-named types
   list themselves in `mta::userdata::object_types()` for the docs generator.
 * `events/events.hpp` — `mta::events::trigger` (module → Lua events).
 
-**View vs Snapshot (plan §18/§45).** The two halves of the value model are
+**View vs Snapshot.** The two halves of the value model are
 deliberately not interchangeable. A *View* (`mta::state`) is borrowed:
 main thread only, valid only while the call runs, never cached, never
 passed to another thread. A *Snapshot*
@@ -169,7 +169,7 @@ passed to another thread. A *Snapshot*
 (strings copied, tables read recursively) and is the **only** thing that
 may cross the async boundary to worker threads and back. A raw
 `lua_State*` never crosses a thread boundary — a resource's VM dies with
-the resource and a restart runs a fresh VM (§4.4, plan §14).
+the resource and a restart runs a fresh VM (see §4.4).
 
 ### 3.4 `source/sdk/runtime/` + `resources/` + `native/` + `logging/` — the engine
 
@@ -282,8 +282,8 @@ ShutdownModule        ──► Scheduler::stop() (join workers first)
 
 The generation identity exists because a restarted resource gets a fresh VM
 whose registry starts in the same state — ref indexes repeat, and only the
-generation check tells a live callback from a stale one (plan §33;
-regression `072_restart.lua` reproduces the V1 bug without the fix).
+generation check tells a live callback from a stale one
+(regression `072_restart.lua` reproduces the V1 bug without the fix).
 
 ---
 
@@ -333,16 +333,16 @@ Three layers, all green in CI (`ctest --preset win-mingw`):
    run after the scripts and before module shutdown. This is where restart
    generations are simulated deterministically (`test_resource_restart`
    swaps in a real fresh VM under a new generation).
-3. **Real-server integration** (`other/server/mta_server.py`, PHASE 11):
+3. **Real-server integration** (`other/server/mta_server.py`):
    downloads and extracts a **pinned** MTA x64 server build (identity +
    sha256 in `other/server/install.json`, isolated under `other/server/`),
    prepares a throwaway server tree, installs the built module, and drives
    the generated `sdkintegration` resource on the running server: module
    load, registration, return values, argument validation, userdata,
-   timers, async tasks, callbacks (plan §32), the §33 restart scenario (the
+   timers, async tasks, callbacks, the stale-generation restart scenario (the
    harness types `restart` into the server console; a stale generation-1
    task must never deliver into generation 2) and a graceful shutdown with
-   an active worker task (plan §32) that must never fire. The Windows
+   an active worker task that must never fire. The Windows
    server requires a real console, so the harness shares its console
    (CONIN$/CONOUT$), injects commands as key events and keeps the console
    scrollback as the run log (`other/server/logs/<timestamp>/server.log`).
@@ -355,7 +355,7 @@ the environment (headers, Lua ABI byte-compare, toolchain, presets).
 
 ## 8. Performance / benchmarks
 
-Policy (plan §44): **measure before optimizing**. No hot path is tuned on
+Policy: **measure before optimizing**. No hot path is tuned on
 intuition — a change that claims a performance win runs the benchmark set
 before and after the change and reports the numbers (see CONTRIBUTING.md).
 The benchmarks are informational Lua scripts in the embedded harness:

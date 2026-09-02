@@ -7,7 +7,7 @@
 // a resource's VM is destroyed when the resource stops and recreated on
 // restart. A Callback pins the function through luaL_ref in the registry of
 // its resource's VM, remembers the resource name AND the VM generation
-// (plan §11/§12) it was created in. On call, the VM is looked up again by
+// it was created in. On call, the VM is looked up again by
 // name and the generation is re-checked:
 //
 //   * a stopped resource never fires (no VM with that name),

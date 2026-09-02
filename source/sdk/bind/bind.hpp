@@ -22,7 +22,7 @@
 //   std::optional<T>        optional argument: nil/absent -> nullopt
 //   mta::lua::rest_args     trailing (variadic) arguments, last parameter only
 //   mta::lua::context       VM and resource name; takes NO Lua argument
-//   mta::Resource           name of a running resource, validated live (§17)
+//   mta::Resource           name of a running resource, validated live
 //
 // Optional parameters may also be written with plain C++ defaults:
 //
@@ -76,14 +76,14 @@ struct context
     std::string resource;
 };
 
-// Signature metadata for one parameter (plan §9).
+// Signature metadata for one parameter.
 struct ArgumentInfo
 {
     std::string type;
     bool optional = false;
 };
 
-// Signature metadata of a registered function (plan §9/§21). `derived` is
+// Signature metadata of a registered function. `derived` is
 // false when the metadata could not be derived from C++ (body-style
 // functions: the types live inside the body).
 struct Signature
@@ -93,13 +93,13 @@ struct Signature
     bool variadic = false;            // trailing rest_args parameter
     bool derived = false;
 
-    // Capability flags derived together with the arguments (plan §9):
+    // Capability flags derived together with the arguments:
     // function_flag_* bits below. The registration bridge copies them into
     // Spec::flags; object methods keep them in their recorded signature.
     std::uint32_t flags = 0;
 };
 
-// Capability flags (plan §9): what the binder derived from the C++ signature
+// Capability flags: what the binder derived from the C++ signature
 // at registration. Rendered by the docs generator (other/tools/docgen.cpp).
 inline constexpr std::uint32_t function_flag_variadic = 1u << 0; // trailing rest_args parameter
 inline constexpr std::uint32_t function_flag_callback = 1u << 1; // takes a Lua function argument
@@ -198,7 +198,7 @@ struct is_vector<std::vector<T, A>> : std::true_type
 
 // --- signature metadata ----------------------------------------------------------
 
-// Lua-facing name of a parameter type (plan §9): used for error messages and
+// Lua-facing name of a parameter type: used for error messages and
 // for the registry's signature metadata. Returns the name the binder's
 // checkers actually report; unsupported types map to "value".
 template <typename T>
@@ -382,7 +382,7 @@ T pull_arg(lua_State *L, int index)
     }
     else if constexpr (std::is_same_v<U, mta::Resource>)
     {
-        // Native MTA objects (plan §17): a Resource is named in Lua -- the
+        // Native MTA objects: a Resource is named in Lua -- the
         // only identity the frozen module ABI provides -- and validated LIVE
         // through the module manager (Resource::find, the precedent of
         // resource.cpp). An unknown or already stopped resource is a
@@ -645,7 +645,7 @@ struct holder
     {
         // Name the running function and record its resource once per call:
         // argument errors render "bad argument #N to '<name>' (expected ...,
-        // got ...)" and log messages carry the call site (plan §20; see the
+        // got ...)" and log messages carry the call site (see the
         // diagnostic context in protect.hpp).
         return protected_call_named(L, &holder<Tag, F>::dispatch, registered_name);
     }

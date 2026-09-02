@@ -1,9 +1,9 @@
--- PHASE 5 (P0): plan §33 restart regression.
+-- Stale-generation restart regression.
 --
 -- Callbacks, an async task and timers are created in one VM generation,
 -- then the resource restarts into a REAL fresh VM (fresh registry, fresh
 -- luaL_ref space). The stale objects must be fully unable to reach the new
--- VM (plan §11/§12/§14).
+-- VM.
 --
 -- The collision is engineered exactly: in each fresh VM the first callback
 -- receives luaL_ref index 1, so the generation-3 callback occupies the SAME
@@ -27,7 +27,7 @@ test_resource_restart()
 ok = test_fresh_vm_dostring([[
 GEN_B = {}
 function gen_b_async(sum) table.insert(GEN_B, "async:" .. tostring(sum)) end
-sample_async_add(10, 20, gen_b_async)   -- ref index 1 again: the §33 collision
+sample_async_add(10, 20, gen_b_async)   -- ref index 1 again: the collision case
 sample_timer(1, 2, function(tick) table.insert(GEN_B, "timer:" .. tostring(tick)) end)
 sample_timer(2, 2, function(tick) table.insert(GEN_B, "timer:" .. tostring(tick)) end)
 ]])
@@ -53,7 +53,7 @@ for _, value in ipairs(log) do
 end
 
 test_assert(delivered_async, "generation-3 async completion delivered in the fresh VM")
-test_assert(not stale_async, "P0 §33: stale generation-2 completion never fired in the fresh VM")
+test_assert(not stale_async, "stale generation-2 completion never fired in the fresh VM")
 test_assert(timer_ticks >= 2, "generation-3 timers fire (multiple timers after restart)")
 
 -- end the generation (cancels the fresh VM's timers, invalidates its

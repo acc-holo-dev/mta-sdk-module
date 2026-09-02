@@ -1,6 +1,6 @@
 #pragma once
 
-// Native MTA types (plan §17) -- safe wrappers only.
+// Native MTA types -- safe wrappers only.
 //
 // The frozen ILuaModuleManager10 ABI exposes exactly one VM lookup:
 // GetResourceFromName. There is NO element/player/vehicle API behind the
@@ -22,7 +22,7 @@
 //         mta::log::info("called from resource ", self->name());
 //     }
 //
-// Binder integration (plan §6/§17): a Resource is a full typed-binder
+// Binder integration: a Resource is a full typed-binder
 // parameter and result. Lua names the resource; the binder (bind.hpp)
 // validates the name LIVE through the module manager on every call and
 // raises "bad argument #N to 'name' (no running resource '...')" when the
@@ -51,7 +51,7 @@ public:
     [[nodiscard]] const std::string &name() const noexcept { return name_; }
 
     // The VM of the resource, looked up LIVE on every call: never cache a
-    // lua_State, the server can destroy it at any time (plan §14). Returns
+    // lua_State, the server can destroy it at any time. Returns
     // nullptr once the resource stopped -- callers must handle that.
     [[nodiscard]] lua_State *vm() const noexcept;
 

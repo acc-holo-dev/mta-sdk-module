@@ -95,7 +95,7 @@ pinning this (`crypto.sha256` is never rewritten).
 
 What improved under the hood: argument errors now carry the running
 function's name (`bad argument #2 to 'sum' (expected number, got string)`)
-in the plan §7 format; registry entries carry derived signature metadata
+in the documented error format; registry entries carry derived signature metadata
 (visible via `mta docs`).
 
 ---
@@ -129,7 +129,7 @@ Semantic changes to audit in existing code:
 The V1 `Scheduler::post_task/post_timer` still exist as internal engine
 API — move call sites to `mta::async::run`.
 
-**Callbacks** (plan §33 — the most important fix): V1 keyed a callback by
+**Callbacks** (the most important fix): V1 keyed a callback by
 `(resource, luaL_ref index)`; a restarted resource's fresh VM handed out
 the same index and a **stale V1 callback could fire the wrong function in
 the new VM**. V2 keys callbacks by `(resource, generation, ref)`, checks
@@ -217,8 +217,8 @@ module ABI exposes no element API, so they cannot be represented safely
 | hand-edited CMake for tests/docs | `mta test all\|unit\|lua\|integration`, `mta docs` (registry metadata via `sdk_docgen`) |
 | no environment checks | `mta doctor` (TOML, headers, Lua ABI byte-compare, toolchain, presets) |
 | manual server install & testing | `mta server install\|test` — pinned server, isolated install, real end-to-end integration run |
-| CPack ZIP release | `mta package` → `dist/` + sha256 (PHASE 14 narrows artifacts to the module binary itself) |
-| CI matrix (linux-gcc, win-mingw, win-msvc) | same matrix + doctor/CLI job (PHASE 13) |
+| CPack ZIP release | `mta package` → `dist/` + sha256 (artifacts narrowed to the module binary itself) |
+| CI matrix (linux-gcc, win-mingw, win-msvc) | same matrix + doctor/CLI job + real-server integration |
 
 ---
 

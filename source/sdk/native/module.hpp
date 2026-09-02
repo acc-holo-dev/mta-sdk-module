@@ -1,9 +1,9 @@
 #pragma once
 
-// Module identity and server facts (plan §5/§38) for diagnostics and version
+// Module identity and server facts for diagnostics and version
 // displays. This is the facade-level wrapper over the ABI glue (sdk/abi) and
 // the module manager: developer code never includes the MTA manager header
-// and never calls mta::module::manager() directly (plan §42).
+// and never calls mta::module::manager() directly.
 
 #include <cstdint>
 #include <optional>
@@ -28,7 +28,7 @@ struct ServerInfo
     std::string operating_system;  // server-reported operating system name
 };
 
-// The SDK's own version facts (plan §38): the release version of the SDK and
+// The SDK's own version facts: the release version of the SDK and
 // the version of the MTA module ABI it implements. Both are separate from
 // ModuleInfo::version (the Module version, from config/module.toml) and from
 // ServerInfo (the runtime MTA server version).

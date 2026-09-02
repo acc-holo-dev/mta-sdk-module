@@ -38,7 +38,7 @@ required scenario is missing, any scenario reports FAIL, any per-generation
 The main resource runs three generations, choreographed by the harness:
 
 ```text
-generation 1  auto-start      function-level scenarios + §33 arming
+generation 1  auto-start      function-level scenarios + stale-generation arming
          -> INTEGRATION: STOP_NOW     harness: stop sdkintegration
 generation 2  stop + start    resource stop/start + stale windows
          -> INTEGRATION: RESTART_NOW  harness: restart sdkintegration
@@ -47,7 +47,7 @@ generation 3  after restart   restart scenarios, multiple timers,
          -> INTEGRATION: RUN_COMPLETE
 ```
 
-## Scenario coverage (plan PROMT.md §32 + §33)
+## Scenario coverage
 
 | # | Scenario | Reported by | Check |
 |---|----------|-------------|-------|
@@ -70,14 +70,14 @@ generation 3  after restart   restart scenarios, multiple timers,
 | 17 | old async task after restart | gen 2 + gen 3 | async task armed before the stop/restart never delivers afterwards |
 | 18 | multiple timers after restart | gen 3 | three fresh timers all fire twice in the restarted VM |
 | 19 | shutdown with active workers | harness | 60 s task still pending at graceful shutdown; never delivered |
-| 20 | stale generation regression (§33) | gen 2 + gen 3 | Resource generation N arms callback + async task → stop → restart same resource → generation N+1; old objects provably cannot reach it (negative markers verified over the whole log) |
+| 20 | stale generation regression | gen 2 + gen 3 | Resource generation N arms callback + async task → stop → restart same resource → generation N+1; old objects provably cannot reach it (negative markers verified over the whole log) |
 
 Scenarios 16/17/20 combine both sides: the Lua suite prints its marker after
 the stale window elapsed inside the next generation, and the harness
 independently verifies the absence of the delivery markers in the entire log
 (the stale callbacks are additionally wired through the fresh VM's first
-`luaL_ref` slot — the collision the module must never allow, plan §11/§12/§14).
+`luaL_ref` slot — the collision the module must never allow).
 
-The most important regression (§33) runs automatically twice per invocation:
+The stale-generation regression runs automatically twice per invocation:
 once through the explicit `stop` + `start` cycle (generation 1 → 2) and once
 through the console `restart` (generation 2 → 3).

@@ -24,7 +24,7 @@ set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 set(CPACK_GENERATOR "ZIP")
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
-# §38: this ZIP packages the MODULE (binary + docs), so its name carries the
+# This ZIP packages the MODULE (binary + docs), so its name carries the
 # Module version from config/module.toml -- not the SDK/project version.
 set(CPACK_PACKAGE_FILE_NAME "${SDK_MODULE_NAME}-${MODULE_CFG_module_version}-${SDK_PLATFORM_TAG}-${SDK_ARCH_TAG}")
 include(CPack)

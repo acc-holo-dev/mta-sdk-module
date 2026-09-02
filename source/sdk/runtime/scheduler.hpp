@@ -56,7 +56,7 @@ public:
     // owned by (resource, generation) when a resource is given: on resource
     // stop, queued tasks are cancelled and completions of the finished
     // generation are dropped before any Lua access. Returns an invalid
-    // handle when the queue is full (plan §13 queue limits) -- fire-and-
+    // handle when the queue is full (queue limits) -- fire-and-
     // forget callers may ignore the result.
     [[nodiscard]] Task post_task(std::function<mta::lua::Arguments()> work,
                                  std::function<void(const mta::lua::Arguments &, const char *)> completion,
@@ -78,7 +78,7 @@ public:
     // Cancels the timers of a resource that just stopped.
     void handle_resource_stopped(const std::string &resource);
 
-    // Runtime override of the task-queue limit (plan §13). Main thread.
+    // Runtime override of the task-queue limit. Main thread.
     void configure(std::size_t queue_limit);
 
     [[nodiscard]] bool running() const noexcept;
@@ -98,7 +98,7 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-// Developer-facing task API (plan §13): posts the task, attributes it to the
+// Developer-facing task API: posts the task, attributes it to the
 // calling resource and returns a cancellable handle.
 [[nodiscard]] Task run(lua_State *lua_vm, std::function<mta::lua::Arguments()> work,
                        std::function<void(const mta::lua::Arguments &, const char *)> completion);

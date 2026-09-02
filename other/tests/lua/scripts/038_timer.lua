@@ -1,4 +1,4 @@
--- PHASE 7: timer handles (plan §15): after()/every() semantics via samples,
+-- Timer handles: after()/every() semantics via samples,
 -- cancellation, and resource ownership.
 
 -- after: one-shot
@@ -32,7 +32,7 @@ sample_after_cancel(id3)
 test_pump(80)
 test_assert(TICKS == ticks_at_cancel, "cancelled every() stops firing")
 
--- resource stop invalidates owned timers (plan §15)
+-- resource stop invalidates owned timers
 FIRED = 0
 local ok4, id4 = pcall(sample_after, 100, function() FIRED = FIRED + 100 end)
 test_assert(ok4 and id4 > 0, "timer scheduled before the stop")

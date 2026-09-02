@@ -1,6 +1,6 @@
 #pragma once
 
-// Unified error model (plan §19).
+// Unified error model.
 //
 // Framework and module errors are C++ exceptions of one type carrying a
 // category. Categories make failures diagnosable and distinguishable:

@@ -1,5 +1,5 @@
--- PHASE 6: task handle (plan §13): run/cancel via the samples, resource
--- ownership of queued tasks (plan §14).
+-- Task handle: run/cancel via the samples, resource
+-- ownership of queued tasks.
 
 -- a cancellable task
 local ok, task_id = pcall(sample_task_run, 40, 2, 3, function(sum) TASK_RESULT = sum end)
@@ -21,7 +21,7 @@ test_assert(TASK_RESULT == 30, "uncancelled task delivered its result")
 -- cancelling an unknown id reports false
 test_assert(sample_task_cancel(999999) == false, "cancelling an unknown id returns false")
 
--- resource ownership (plan §14): a queued task of this resource is cancelled
+-- resource ownership: a queued task of this resource is cancelled
 -- by a stop; its completion never runs
 TASK_RESULT = nil
 local ok3, id3 = pcall(sample_task_run, 60, 5, 5, function(sum) TASK_RESULT = sum end)

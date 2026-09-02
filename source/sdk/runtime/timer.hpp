@@ -1,6 +1,6 @@
 #pragma once
 
-// Developer-facing timer API (plan §15).
+// Developer-facing timer API.
 //
 //     auto timer = mta::timer::after(5000, [] { ... });  // fires once
 //     auto timer = mta::timer::every(1000, [] { ... });  // repeats forever

@@ -1,4 +1,4 @@
-// Async task handle (plan §13): run() returns a Task that can be cancelled
+// Async task handle: run() returns a Task that can be cancelled
 // before its completion is delivered, and reports its state.
 //
 //     local id = sample_task_run(100, 2, 3, function(sum) ... end)
@@ -18,7 +18,7 @@ namespace
 {
 // Live task handles of the calling resource (main thread only; cleared when
 // the resource stops). HandleMap is the reusable id->handle registry from
-// the library layer (plan §23: functions may use library).
+// the library layer (functions may use library).
 mta::resources::Store<mta::library::base::HandleMap<std::uint64_t, mta::async::Task>> g_tasks;
 } // namespace
 

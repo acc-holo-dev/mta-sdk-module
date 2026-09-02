@@ -7,7 +7,7 @@
 // into a proper Lua error (longjmp across the C boundary is safe because the
 // module does not own C++ resources at that point).
 //
-// Error rendering rules (plan §19):
+// Error rendering rules:
 //   mta::errors::Error with InternalError -> "internal module error: ..."
 //   any other mta::errors::Error          -> message verbatim
 //   other std::exception                  -> "internal module error: ..."
@@ -17,7 +17,7 @@
 // (set by the registration trampolines and by the async dispatcher): the
 // registered function name is used to render "bad argument #2 to 'name'", and
 // the whole context (function, resource, task/timer) is what mta::log uses to
-// attribute messages automatically (plan §20). The context is scoped: the
+// attribute messages automatically. The context is scoped: the
 // trampolines restore the previous one when the call returns, so a log
 // emitted outside a module call is never attributed to a stale call site.
 
@@ -36,7 +36,7 @@ namespace mta::lua
 namespace detail
 {
 // Diagnostic context of the framework path currently running on this thread
-// (thread_local, plan §20). Written by the registration trampolines (module
+// (thread_local). Written by the registration trampolines (module
 // calls) and by the async dispatcher (worker loop, scheduler pump, callback
 // delivery); read by error rendering ("bad argument #N to 'name'") and by
 // the automatic log-message context. Purely diagnostic bookkeeping: nothing
@@ -163,7 +163,7 @@ inline int protected_call(lua_State *L, int (*fn)(lua_State *))
 
 // Same as protected_call, but scoped to the call: it names the running
 // function (argument errors render "bad argument #N to '<name>'"), records
-// the resource owning L for the automatic log-message context (plan §20)
+// the resource owning L for the automatic log-message context
 // and clears any async attribution of the surrounding dispatch. The
 // previous context is restored when the call returns.
 inline int protected_call_named(lua_State *L, int (*fn)(lua_State *), const char *name)

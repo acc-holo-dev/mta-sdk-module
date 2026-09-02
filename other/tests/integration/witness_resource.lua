@@ -1,4 +1,4 @@
--- Witness resource for the multi-resource scenarios (plan PROMT.md §32).
+-- Witness resource for the multi-resource scenarios.
 --
 -- Installed by other/server/mta_server.py as "sdkintegration2", next to the
 -- main suite resource ("sdkintegration"). It auto-starts, never restarts,
@@ -19,7 +19,7 @@ local function check(name, condition)
 end
 
 setTimer(function()
-    -- §32 multiple resources: this resource has its own VM (its own
+    -- multiple-resources scenario: this resource has its own VM (its own
     -- registered functions, its own per-resource state) while the main
     -- resource runs its scenarios next door. sample_session_hit() must
     -- start from 1 here: the main resource already used its own session

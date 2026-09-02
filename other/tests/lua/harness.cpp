@@ -4,7 +4,7 @@
 // mock ILuaModuleManager10 and runs every other/tests/lua/scripts/*.lua. Module
 // functions are verified without launching an MTA server: argument types,
 // error translation, tables, async result delivery, timers, resource
-// restarts (plan §33: a restart swaps in a REAL fresh VM -- fresh registry,
+// restarts (a restart swaps in a REAL fresh VM -- fresh registry,
 // fresh luaL_ref space -- under a new generation).
 //
 // Lua-side helpers:
@@ -217,7 +217,8 @@ int test_resource_start(lua_State *)
     return 0;
 }
 
-// Plan §33: a restart gives the resource a REAL fresh VM -- fresh registry,
+// The restart regression: a restart gives the resource a REAL fresh VM --
+// fresh registry,
 // fresh luaL_ref space -- under a new generation. The script itself keeps
 // running in the VM it started in; use test_fresh_vm_dostring /
 // test_fresh_vm_get to drive and observe the new one.
@@ -305,7 +306,7 @@ void register_test_helpers(lua_State *lua_vm)
     lua_register(lua_vm, "test_resource_restore", test_resource_restore);
 }
 
-// --- C++-side async task regressions (plan §13/§14) ----------------------------
+// --- C++-side async task regressions ----------------------------
 
 void expect(bool condition, const char *message)
 {
@@ -341,7 +342,7 @@ void run_async_regressions(lua_State *script_vm)
     expect(task.done(), "delivered task reports done()");
     expect(!task.cancel(), "cancelling a finished task reports false");
 
-    // cancellation suppresses the completion (plan §13)
+    // cancellation suppresses the completion
     bool cancelled_delivery = false;
     Task task2 = mta::async::run(
         script_vm,
@@ -353,7 +354,7 @@ void run_async_regressions(lua_State *script_vm)
     expect(!cancelled_delivery, "a cancelled task never runs its completion");
     expect(task2.done(), "a cancelled task reports done()");
 
-    // resource ownership (plan §14): the completion of a finished generation
+    // resource ownership: the completion of a finished generation
     // never runs
     bool owned_delivery = false;
     Task task3 = mta::async::run(
@@ -366,7 +367,7 @@ void run_async_regressions(lua_State *script_vm)
     mta::module::pulse();
     expect(!owned_delivery, "a completion is dropped after its resource stopped");
 
-    // queue limit (plan §13): a full queue rejects tasks instead of blocking.
+    // queue limit: a full queue rejects tasks instead of blocking.
     // With W workers (auto: at most 8) and queue limit 2, posting 20 slow
     // tasks rejects at least 20 - 8 - 2 = 10 of them deterministically.
     mta::async::Scheduler::instance().configure(2);
