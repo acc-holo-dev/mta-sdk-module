@@ -485,3 +485,60 @@ newest last.
   (full history only until the console buffer limit).
 - **NEXT**: PHASE 12 — documentation rewrite (example, API, architecture,
   migration v1→v2) in other/documents/.
+
+## PHASE 12 — Documentation rewrite
+
+- **PHASE**: 12 — fully write `example.md`, `api.md`, `architecture.md`,
+  `migration-v1-to-v2.md` in `other/documents/` (plan PHASE 12).
+- **CHANGED**:
+  - `API.md` → `api.md` and `ARCHITECTURE.md` → `architecture.md`
+    (case-only renames via `git mv`): on this Windows checkout the two
+    spellings are one file, so the V2 rewrite replaced the old long-form
+    documents in place; git history keeps the previous versions.
+- **ADDED**:
+  - `example.md` — an end-to-end feature walkthrough built only from the
+    public V2 surface (identity in `config/module.toml`, body/lambda
+    registration, optional/variadic/context arguments, `mta::async::run`
+    with a `Task` handle, `mta::timer::after`, an `MTA_OBJECT` type with
+    methods, `mta::resources::Store`, `mta::events::trigger`,
+    `mta::Resource`), plus build/test/install commands and a table mapping
+    every concept to its sample file and test script.
+  - `api.md` — the full V2 reference: registration macros, supported
+    argument/result types (incl. `rest_args`, `context`, `Callback`,
+    tuples/vectors/optional), error format, `Argument`/`Table`/`Arguments`
+    snapshots, table helpers, stack helpers, logging levels, tasks +
+    handles + queue limits, callbacks (generation identity), timers +
+    handles, `Store`/`Hub` generations, `MTA_OBJECT`/`MTA_METHOD`, events,
+    the safe native subset, module identity, the TOML schema (with
+    override rules) and the `mta` CLI command table.
+  - `architecture.md` — layers with the downward-only dependency rule, the
+    ABI/export surface, registry + signature metadata, binder internals,
+    the runtime engine, four key flows (startup/registration, a single
+    call, async pump, resource lifecycle with generations), threading
+    rules, configuration flow, the three test layers (unit, embedded-Lua
+    harness, real-server integration incl. console driving) and
+    contributor conventions.
+  - `migration-v1-to-v2.md` — V1 (audited baseline) → V2: layout, config
+    migration, the one-include facade, registration, async/task/callback
+    semantics to audit (stale-callback fix, queue limits, cooperative
+    cancellation), timer handles, `MTA_OBJECT` identities, per-resource
+    state, native types, tooling, a 10-step checklist and the list of
+    things that did NOT change (ABI, presets, keep-macro semantics).
+  - Cross-reference notes in the retained `GUIDES.md`/`TUTORIAL.md`
+    pointing to the new set.
+- **REMOVED**: the old long-form `API.md`/`ARCHITECTURE.md` content as
+  standalone documents (superseded; recoverable from git history).
+- **TESTS**: docs are prose — verified by construction: every API claim
+  cross-checked against the actual headers (registry macros, binder
+  `pull_arg` type table, `Task`/`Timer`/`Callback`/`Store` semantics,
+  `check_*`/`opt_*`/table-helper signatures, TOML keys, CLI commands);
+  every file/sample path referenced in `example.md` verified to exist;
+  the doc set renders with relative links (`api.md` ↔ `example.md` ↔
+  `architecture.md` ↔ `migration-v1-to-v2.md` ↔ `GUIDES.md`/`TUTORIAL.md`).
+  `ctest --preset win-mingw` 3/3 unchanged (no code touched).
+- **RISKS**: Windows case-insensitivity means lowercase and UPPERCASE
+  document names are the same file (the reason the rewrite replaced the
+  old docs rather than sitting beside them); the retained long-form detail
+  of the old API.md lives only in git history now.
+- **NEXT**: PHASE 13 — CI: doctor/CLI job, build+test matrix, integration
+  where the runner allows.

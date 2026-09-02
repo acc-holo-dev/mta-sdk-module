@@ -1,5 +1,9 @@
 # Tutorial: a module from scratch
 
+> The concise V2 reference set lives in [api.md](api.md) (with
+> [example.md](example.md), [architecture.md](architecture.md) and
+> [migration-v1-to-v2.md](migration-v1-to-v2.md)).
+
 A step-by-step path from an empty folder to a working module loaded on an
 MTA server. You need a compiler (MinGW-w64 or MSVC on Windows, GCC on Linux),
 CMake ≥ 3.27 and Ninja.

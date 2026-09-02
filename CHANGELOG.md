@@ -8,6 +8,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Documentation rewrite (plan PHASE 12) in `other/documents/`: `example.md`
+  (a complete feature walkthrough — sync function, async task, timer,
+  object, per-resource state, events, resources — mapped to the bundled
+  samples and tests), `api.md` (the full V2 public surface: registration
+  macros, typed arguments/results, errors, snapshots, stack helpers,
+  logging, tasks, callbacks, timers, per-resource state, objects, events,
+  native types, module identity, `config/module.toml` and the `mta` CLI),
+  `architecture.md` (layers, key flows incl. restart generations, threading
+  rules, configuration, the three test layers incl. the real-server
+  harness, conventions) and `migration-v1-to-v2.md` (layout/config/API
+  changes, semantics to audit, a step-by-step checklist). The legacy
+  `API.md`/`ARCHITECTURE.md` were superseded by the lowercase set (git
+  history keeps the old long-form); `GUIDES.md`/`TUTORIAL.md` stay as
+  supplements with pointers to the new set.
 - Server integration harness (plan §30-§33, PHASE 11) in `other/server/mta_server.py`
   (stdlib Python): identity-pinned MTA server install (`install`/`update`/
   `version`/`start`/`stop`) into an isolated directory under `other/server/`

@@ -1,5 +1,9 @@
 # Advanced Guides — SDK module
 
+> The concise V2 reference set lives in [api.md](api.md) (with
+> [example.md](example.md), [architecture.md](architecture.md) and
+> [migration-v1-to-v2.md](migration-v1-to-v2.md)).
+
 In-depth guides on non-obvious topics. For a quick start and basic recipes
 see [README.md](../README.md).
 
