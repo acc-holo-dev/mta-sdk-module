@@ -8,6 +8,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Release pipeline rework (plan PHASE 14) in `.github/workflows/release.yml`:
+  the matrix now covers `linux-gcc`, `win-mingw` and `win-msvc`; every leg
+  builds, runs the unit + lua suites through the CLI, runs the real-server
+  integration as a non-blocking canary (external download/console — the
+  blocking gates are build + tests) and packages with `mta package`. The
+  release attaches exactly the module binaries
+  (`<name>-<version>-<platform>-x64.dll/.so` + printed sha256) — the old
+  CPack ZIP + LICENSE artifacts are gone (plan §36: publish only the
+  module binary). CI (PHASE 13): `mta doctor` job, CLI smoke on Linux
+  (`mta docs`, `mta test unit`, `mta test lua`), a Clang build leg and a
+  real-server integration canary job.
 - Documentation rewrite (plan PHASE 12) in `other/documents/`: `example.md`
   (a complete feature walkthrough — sync function, async task, timer,
   object, per-resource state, events, resources — mapped to the bundled

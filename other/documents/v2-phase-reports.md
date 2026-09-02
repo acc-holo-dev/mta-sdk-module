@@ -542,3 +542,71 @@ newest last.
   of the old API.md lives only in git history now.
 - **NEXT**: PHASE 13 — CI: doctor/CLI job, build+test matrix, integration
   where the runner allows.
+
+## PHASE 13 — CI
+
+- **PHASE**: 13 — build, unit, lua, integration, doctor in CI; matrix
+  Windows MSVC / Windows MinGW / Linux GCC (+ Clang).
+- **CHANGED**:
+  - `.github/workflows/ci.yml`: every matrix job now states its coverage
+    (build + unit + lua via ctest); the Linux job gained a CLI smoke step
+    (`mta docs`, `mta test unit`, `mta test lua`) that exercises the
+    project CLI against a real built module, including the docgen target.
+- **ADDED**:
+  - `doctor` job: `python other/tools/mta/cli.py doctor` on a clean runner
+    (WARNs tolerated, FAILs gate — READY/NOT READY semantics verified in
+    PHASE 10).
+  - `integration` canary job (windows-latest, `continue-on-error`): builds
+    with the MinGW preset via the CLI, installs the pinned MTA x64 server
+    and runs the full real-server integration. Non-blocking by design:
+    the download and console driving can fail for reasons outside the SDK
+    (plan: "integration where the environment allows").
+  - `linux-clang` job: direct cmake configure with `clang`/`clang++`
+    (base-preset cache variables; clang is preinstalled on ubuntu runners).
+- **REMOVED**: nothing.
+- **TESTS**: static verification only (workflows are runner-dependent):
+  YAML structure checked, every referenced CLI subcommand/preset exists
+  (`build <preset>`, `test <preset> all|unit|lua`, `docs`, `doctor`,
+  `server install|test`), ctest filters match the real test names,
+  MSVC/MinGW/GCC/Clang setup steps mirror the presets' compiler variables.
+- **RISKS**: the integration canary and doctor depend on runner images
+  (nightly download availability; python/`msys2` versions) — both are
+  allowed to be flaky by construction (canary non-blocking; doctor gates
+  only on real FAILs); Clang is not a pinned release target.
+- **NEXT**: PHASE 14 — release pipeline (binaries-only artifacts, MSVC in
+  the release matrix).
+
+## PHASE 14 — Release
+
+- **PHASE**: 14 — release pipeline: build → test → integration → package →
+  publish; artifacts are exactly `<module-name>.dll` / `.so`.
+- **CHANGED**:
+  - `.github/workflows/release.yml` rewritten: matrix `linux-gcc` +
+    `win-mingw` + `win-msvc` (MSVC added per plan); every leg builds and
+    tests through the CLI (`mta build <preset>`, `mta test <preset> all`),
+    runs the real-server integration as a **non-blocking canary** on the
+    MinGW leg (the blocking gates are build + tests), and packages via
+    `mta package <preset>`; the old CPack ZIP + LICENSE artifacts and the
+    CMakeCache-based artifact scraping are gone — the release attaches
+    exactly `dist/<name>-<version>-<platform>-x64.dll/.so` with the sha256
+    printed in the log (plan §36 "publish ONLY the module binary" — the
+    audited V1 violation is fixed). MinGW steps drive the toolchain from
+    `C:\msys64\ucrt64\bin` via GITHUB_PATH with the runner's native
+    Python (no dependence on an msys2 Python).
+- **ADDED**: nothing beyond the workflow rework (`mta package` itself
+  already produced the plan-§36 artifact shape).
+- **REMOVED**: CPack ZIP + LICENSE release artifacts; the
+  CMakeCache-scraping packaging step.
+- **TESTS**: static verification (release runs only on `v*` tags):
+  every CLI subcommand/preset referenced exists and accepts the arguments
+  used (`build/test/package <preset>`, `server install|test`); the
+  artifact glob `dist/*` contains exactly the packaged binary per leg;
+  the MSVC leg mirrors the CI job's toolchain steps.
+- **RISKS**: the release canary (integration) is non-blocking by design —
+  a failed canary does not gate a publish (download/console flakiness is
+  external); if a hard release-time integration gate is ever required, the
+  `continue-on-error` flag is the single switch; `cmake/install.cmake`
+  CPack rules remain in the build system but nothing consumes them for
+  releases.
+- **NEXT**: definition-of-done sweep (§50) — all 14 phases complete; final
+  full verification pass.
