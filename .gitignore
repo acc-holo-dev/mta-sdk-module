@@ -5,6 +5,10 @@
 # Locally provisioned MTA servers (other/server/ infrastructure)
 /other/server/downloads/
 /other/server/servers/
+/other/server/logs/
+/other/server/run/
+/other/server/server.pid
+/other/server/install.json
 
 # Generated documentation (mta docs)
 /generated/
@@ -14,3 +18,7 @@
 *.suo
 *.swp
 *~
+# Locally provisioned tools and Python cache
+/other/server/tools/
+__pycache__/
+*.pyc

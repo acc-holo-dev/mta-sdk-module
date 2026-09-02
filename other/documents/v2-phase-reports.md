@@ -428,3 +428,60 @@ newest last.
 - **NEXT**: PHASE 11 — real server harness in other/server/ (pinned MTA
   server download, temp server dir, module install, start/stop, logs),
   wired into `mta server` and `mta test integration`.
+
+## PHASE 11 — Real server integration harness
+
+- **PHASE**: 11 — real end-to-end integration against a pinned MTA:SA x64
+  server (plan §30-§33).
+- **CHANGED**:
+  - `other/server/mta_server.py` hardened after live runs: the generated
+    `mtaserver.conf` uses the real schema (`<serverport>`, `<module
+    src=...>`), the module installs into `x64/modules` (SERVER_BIN_PATH_MOD),
+    and the harness drives the server through its console instead of pipes
+    (the Windows server requires a real console for output and reads
+    commands from the console input buffer; with redirected stdout its
+    startup check `GetConsoleScreenBufferInfo` fails and it quits).
+  - Console mode: the harness shares its console with the server (CONIN$/
+    CONOUT$ handles with GENERIC_READ|GENERIC_WRITE passed via
+    STARTF_USESTDHANDLES), types `restart <resource>` and `exit` as console
+    key events (hand-packed INPUT_RECORDs, correct x64 20-byte layout),
+    consumes the console scrollback as the run log (full buffer read up to
+    the cursor row) and keeps it under other/server/logs/<timestamp>/.
+- **ADDED**:
+  - Pinned server install: nightly build `mtasa_x64-1.6-rc-24140-20260820.exe`
+    downloaded, sha256 recorded, payload extracted with a locally
+    provisioned 7-Zip (26.02 x64 .msi unpacked via `msiexec /a` — no
+    elevation; the installer .exe would require admin AND silently
+    redirected into the registered MTA install, which §31 forbids). Install
+    identity stored in `other/server/install.json`; commands
+    `install`/`update`/`version`/`start`/`stop`.
+  - `mta server test` / `mta test integration`: builds the module, prepares
+    a throwaway server tree (unique ports per run), installs the module,
+    and runs the generated `sdkintegration` resource: §32 scenarios (module
+    load, function registration, return values, argument validation,
+    userdata + validation, MTA timers, async task + completion, callbacks)
+    and §33 (generation-1 arms a 10 s stale task and asks for a restart;
+    the harness types `restart` into the server console; generation 2 waits
+    past the stale window and reports the second result; a stale delivery
+    or a fired shutdown task fails the run).
+  - Graceful shutdown scenario: the server stops via the console `exit`
+    command while a 60 s task is still queued; `ShutdownModule` must cancel
+    it cleanly (SHOULD_NEVER_FIRE must never appear).
+- **REMOVED**: nothing.
+- **TESTS**:
+  - `python other/server/mta_server.py test` → both generations
+    INTEGRATION_RESULT: PASS on the real pinned x64 server (module loaded:
+    `MODULE: Loaded "Base Module" (2.00)`), no STALE_TASK_DELIVERED, no
+    SHOULD_NEVER_FIRE, clean `Server stopped!`; log kept at
+    other/server/logs/20260902-050836/server.log.
+  - `mta server version` (CLI delegation) prints the pinned identity and
+    sha256; `python other/tools/mta/cli.py test integration` green.
+  - `ctest --preset win-mingw` 3/3 passed (165 assertions) — no regressions.
+- **RISKS**: console driving is Windows-console specific and assumes a
+  desktop session (AllocConsole fails harmlessly when a console exists);
+  the harness pins one server build on purpose (identity + checksum), so
+  new builds require an explicit `mta server update`; MTA writes no server
+  log by default in this layout, so the console scrollback is the kept log
+  (full history only until the console buffer limit).
+- **NEXT**: PHASE 12 — documentation rewrite (example, API, architecture,
+  migration v1→v2) in other/documents/.

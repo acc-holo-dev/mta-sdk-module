@@ -8,6 +8,28 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Server integration harness (plan §30-§33, PHASE 11) in `other/server/mta_server.py`
+  (stdlib Python): identity-pinned MTA server install (`install`/`update`/
+  `version`/`start`/`stop`) into an isolated directory under `other/server/`
+  — the installer payload is extracted directly (a registered MTA:SA
+  installation on the machine would otherwise silently redirect the
+  install), with the pinned build identity and sha256 recorded in
+  `install.json`; the extraction tool (7-Zip) is bootstrapped locally via an
+  `msiexec /a` administrative image, so nothing requires elevation.
+- `mta server test` / `mta test integration`: end-to-end run on the REAL
+  pinned x64 server — builds the module, prepares a throwaway server tree
+  with unique ports per run, loads the module (`<module src=...>` from
+  `x64/modules`), and drives the `sdkintegration` resource through the §32
+  scenarios (module load, registration, return values, argument validation,
+  userdata + validation, MTA timers, async tasks, callbacks) and the §33
+  restart scenario (the harness restarts the resource mid-run; the
+  generation-1 stale task must never deliver into generation 2), then stops
+  the server gracefully with a 60-second task still queued (§32 shutdown)
+  and asserts it never fires.
+- Console driving: the Windows server requires a real console for output and
+  input, so the harness shares its console (CONIN$/CONOUT$ handles), types
+  `restart`/`exit` as key events, consumes the console scrollback as the run
+  log and keeps it under `other/server/logs/`.
 - `mta` project CLI (plan §24-§29, PHASE 10) in `other/tools/mta/`
   (stdlib Python + launchers): `init` (full project scaffold, non-destructive
   guards, identity rewritten from the name), `new function`/`new object`
