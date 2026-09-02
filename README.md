@@ -257,4 +257,4 @@ release pipeline before packaging. Releases attach exactly
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 HoloDev
+MIT — Copyright (c) 2026 HoloDev

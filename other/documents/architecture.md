@@ -357,7 +357,7 @@ the environment (headers, Lua ABI byte-compare, toolchain, presets).
 
 Policy: **measure before optimizing**. No hot path is tuned on
 intuition — a change that claims a performance win runs the benchmark set
-before and after the change and reports the numbers (see CONTRIBUTING.md).
+before and after the change and reports the numbers.
 The benchmarks are informational Lua scripts in the embedded harness:
 timings are printed, sanity values are asserted, nothing fails on rate.
 
