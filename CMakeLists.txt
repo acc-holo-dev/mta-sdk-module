@@ -79,6 +79,44 @@ include(cmake/core/common.cmake)
 include(cmake/lua/lua.cmake)
 include(cmake/core/file.cmake)
 
+# ---------------------------------------------------------------------------
+# [features] (plan §4): subsystem switches. They flow into the build as
+# SDK_FEATURE_* compile definitions, and the bundled sample functions of a
+# disabled subsystem are excluded from the module (and the test binary) —
+# the developer decides what the built module ships, only in module.toml.
+# Explicit cache overrides win: -DSDK_FEATURE_ASYNC=OFF, ...
+# ---------------------------------------------------------------------------
+foreach(_feature ASYNC USERDATA EVENTS OBJECTS)
+  string(TOLOWER "${_feature}" _feature_cfg)
+  if(DEFINED CACHE{SDK_FEATURE_${_feature}})
+    set(SDK_FEATURE_${_feature} "$CACHE{SDK_FEATURE_${_feature}}")
+  elseif(MODULE_CFG_features_${_feature} STREQUAL "false")
+    set(SDK_FEATURE_${_feature} OFF)
+  else()
+    set(SDK_FEATURE_${_feature} ON)
+  endif()
+endforeach()
+
+set(SDK_FEATURE_DEFINES "")
+foreach(_feature ASYNC USERDATA EVENTS OBJECTS)
+  if(SDK_FEATURE_${_feature})
+    list(APPEND SDK_FEATURE_DEFINES "SDK_FEATURE_${_feature}=1")
+  else()
+    list(APPEND SDK_FEATURE_DEFINES "SDK_FEATURE_${_feature}=0")
+  endif()
+endforeach()
+
+# Sample functions of a disabled subsystem leave the build entirely.
+if(NOT SDK_FEATURE_ASYNC)
+  list(FILTER SDK_SOURCES EXCLUDE REGEX "/functions/async/")
+endif()
+if(NOT SDK_FEATURE_USERDATA OR NOT SDK_FEATURE_OBJECTS)
+  list(FILTER SDK_SOURCES EXCLUDE REGEX "/functions/objects/")
+endif()
+if(NOT SDK_FEATURE_EVENTS)
+  list(FILTER SDK_SOURCES EXCLUDE REGEX "/functions/events/")
+endif()
+
 set(_outdir "${CMAKE_BINARY_DIR}/module/${SDK_PLATFORM_TAG}-${SDK_ARCH_TAG}")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${_outdir}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${_outdir}")
@@ -100,13 +138,20 @@ endif()
 # [async] runtime knobs (plan §4/§13): worker count and task-queue limit are
 # compiled in from config/module.toml so the module and its config stay one
 # source of truth. workers = "auto" compiles to a hardware-concurrency probe.
-set(SDK_ASYNC_WORKERS_CFG "${MODULE_CFG_async_workers}")
+# Explicit cache overrides win: -DSDK_ASYNC_WORKERS=4 -DSDK_ASYNC_QUEUE=1024.
+if(DEFINED CACHE{SDK_ASYNC_WORKERS})
+  set(SDK_ASYNC_WORKERS_CFG "$CACHE{SDK_ASYNC_WORKERS}")
+else()
+  set(SDK_ASYNC_WORKERS_CFG "${MODULE_CFG_async_workers}")
+endif()
 if(SDK_ASYNC_WORKERS_CFG STREQUAL "auto")
   set(SDK_ASYNC_WORKER_DEFINES SDK_ASYNC_WORKERS_AUTO=1)
 else()
   set(SDK_ASYNC_WORKER_DEFINES "SDK_ASYNC_WORKERS_N=${SDK_ASYNC_WORKERS_CFG}")
 endif()
-if(NOT MODULE_CFG_async_queue)
+if(DEFINED CACHE{SDK_ASYNC_QUEUE})
+  set(SDK_ASYNC_QUEUE_N "$CACHE{SDK_ASYNC_QUEUE}")
+elseif(NOT MODULE_CFG_async_queue)
   set(SDK_ASYNC_QUEUE_N 4096)
 else()
   set(SDK_ASYNC_QUEUE_N "${MODULE_CFG_async_queue}")
@@ -118,6 +163,7 @@ target_compile_definitions(sdk_core PRIVATE
     "SDK_MODULE_AUTHOR=\"${SDK_MODULE_AUTHOR}\""
     ${SDK_ASYNC_WORKER_DEFINES}
     "SDK_ASYNC_QUEUE_N=${SDK_ASYNC_QUEUE_N}"
+    ${SDK_FEATURE_DEFINES}
 )
 
 target_include_directories(sdk_core

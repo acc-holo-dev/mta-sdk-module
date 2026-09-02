@@ -2,14 +2,23 @@
 
 // userdata/metatables: objects with methods and automatic memory release.
 //
-// Lets you create Lua objects that have methods (obj:method(...)) and a
-// destructor (__gc), like in full-featured libraries (sockets, mysql).
+// A type is declared ONCE with a stable, compiler-independent identity and
+// registered with the module name prefix (plan §16):
 //
 //     struct Counter { double value = 0; };
 //
-//     // Register the methods (once, lazily):
-//     MTA_METHOD(Counter, "get", [](Counter &self) { return self.value; });
-//     MTA_METHOD(Counter, "set", [](Counter &self, double v) { self.value = v; });
+//     // Stable type id: the metatable name becomes "mta.<module>.counter"
+//     // regardless of the compiler (no typeid(T).name() identity).
+//     MTA_OBJECT("counter", Counter)
+//
+//     // Register the methods (once per process; Registry calls them once
+//     // per VM):
+//     void register_counter_methods(lua_State *L)
+//     {
+//         MTA_METHOD(Counter, "get", [](Counter &self) { return self.value; });
+//         MTA_METHOD(Counter, "set", [](Counter &self, double v) { self.value = v; });
+//     }
+//     const bool _ = mta::userdata::Registry<Counter>::set_methods(&register_counter_methods);
 //
 //     // Create an object from a module function:
 //     MTA_LUA_FUNCTION("counter_create", "Creates a counter.")
@@ -24,8 +33,16 @@
 //     c:get()   -- 42
 //     c:set(100)
 //     c = nil   -- __gc calls ~Counter()
+//
+// The identity is deterministic, stable and compiler-independent when
+// declared via MTA_OBJECT, and module-aware: two different modules built
+// from this SDK cannot collide on the same type name. A type without an
+// explicit name falls back to a compiler-dependent identity and logs a
+// warning -- use MTA_OBJECT in new code.
 
+#include "sdk/abi/module.hpp"
 #include "sdk/bind/bind.hpp"
+#include "sdk/logging/logging.hpp"
 #include "sdk/lua/protect.hpp"
 
 #include <string>
@@ -42,6 +59,28 @@ public:
     // Function that registers the type's methods (called once per VM).
     using Registrar = void (*)(lua_State *);
 
+    // Sets the explicit type identity (plan §16): stable, deterministic,
+    // compiler-independent. Returns true (usable as a static initializer,
+    // which is what the MTA_OBJECT macro does). The first call wins; later
+    // conflicting calls are a programming error and are ignored with a log.
+    static bool set_type_name(const char *name)
+    {
+        if (name == nullptr || *name == '\0')
+        {
+            mta::log::error("MTA_OBJECT: an empty type name is not allowed");
+            return false;
+        }
+        auto &stored = type_name_();
+        if (stored.empty() || stored == name)
+        {
+            stored = name;
+            return true;
+        }
+        mta::log::error("MTA_OBJECT: type identity '", stored, "' is already set; ignoring '",
+                        name, "'");
+        return false;
+    }
+
     // Sets the method registrar. Call once (e.g. from a static initializer)
     // before the first create/check.
     static void set_methods(Registrar registrar)
@@ -52,7 +91,7 @@ public:
     // Registers the metatable in THIS VM (lazily) and calls the registrar.
     static void ensure(lua_State *L)
     {
-        luaL_getmetatable(L, type_name());
+        luaL_getmetatable(L, identity());
         if (!lua_isnil(L, -1))
         {
             lua_pop(L, 1);
@@ -60,7 +99,7 @@ public:
         }
         lua_pop(L, 1);
 
-        luaL_newmetatable(L, type_name());
+        luaL_newmetatable(L, identity());
 
         // __gc -- the object destructor.
         lua_pushcfunction(L, &gc_metamethod);
@@ -86,7 +125,7 @@ public:
         ensure(L);
         void *memory = lua_newuserdata(L, sizeof(T));
         T *object = new (memory) T(std::move(value));
-        luaL_getmetatable(L, type_name());
+        luaL_getmetatable(L, identity());
         lua_setmetatable(L, -2);
         return object;
     }
@@ -96,25 +135,25 @@ public:
     {
         if (lua_type(L, index) != LUA_TUSERDATA)
         {
-            mta::lua::detail::bad_argument_type(index, "module object",
+            mta::lua::detail::bad_argument_type(index, expected_name(),
                                                 mta::lua::detail::type_name(lua_type(L, index)));
         }
 
         if (lua_getmetatable(L, index) == 0)
         {
             mta::errors::raise_error(
-                ::mta::errors::Category::InvalidObject, "bad argument #", index, " (expected "
-                "module object, got object without a metatable)");
+                ::mta::errors::Category::InvalidObject, "bad argument #", index, " (expected ",
+                expected_name(), ", got object without a metatable)");
         }
-        luaL_getmetatable(L, type_name());
+        luaL_getmetatable(L, identity());
         const bool matches = lua_rawequal(L, -1, -2) != 0;
         lua_pop(L, 2);
 
         if (!matches)
         {
-            mta::errors::raise_error(::mta::errors::Category::InvalidObject,
-                                     "bad argument #", index, " (expected module object, got "
-                                                             "object of another type)");
+            mta::errors::raise_error(::mta::errors::Category::InvalidObject, "bad argument #",
+                                     index, " (expected ", expected_name(), ", got object of "
+                                                                            "another type)");
         }
 
         return static_cast<T *>(lua_touserdata(L, index));
@@ -128,7 +167,7 @@ public:
         method_holder<Tag, F>::fn = std::move(fn);
         method_holder<Tag, F>::registered_name = name;
 
-        luaL_getmetatable(L, type_name());
+        luaL_getmetatable(L, identity());
         lua_getfield(L, -1, "__index");
         // lua_pushcclosure directly: the lua_pushcfunction macro cannot cope
         // with a comma in template arguments like method_holder<Tag, F>.
@@ -144,10 +183,38 @@ private:
         return registrar;
     }
 
-    static const char *type_name()
+    static std::string &type_name_()
     {
-        static const std::string name = std::string("mta.userdata.") + typeid(T).name();
+        static std::string name;
+        return name;
+    }
+
+    // The metatable identity (plan §16): module-aware, deterministic, and
+    // stable when the type name was declared with MTA_OBJECT. Computed once
+    // per process; the module name never changes after initialization.
+    static const char *identity()
+    {
+        static const std::string name = [] {
+            const std::string module = mta::module::info().name;
+            const std::string &explicit_name = type_name_();
+            if (!explicit_name.empty())
+            {
+                return "mta." + module + "." + explicit_name;
+            }
+            mta::log::warn("MTA_OBJECT: type ", typeid(T).name(),
+                           " has no explicit type name; using a compiler-dependent fallback "
+                           "identity (declare the type with MTA_OBJECT)");
+            return "mta." + module + ".userdata." + std::string(typeid(T).name());
+        }();
         return name.c_str();
+    }
+
+    // How the type is named in argument errors: the declared type id, or a
+    // generic "module object" when no explicit name was set.
+    static const char *expected_name()
+    {
+        const std::string &explicit_name = type_name_();
+        return explicit_name.empty() ? "module object" : explicit_name.c_str();
     }
 
     static int gc_metamethod(lua_State *L)
@@ -211,6 +278,13 @@ private:
     }
 };
 } // namespace mta::userdata
+
+// Declares an object type with a stable, compiler-independent identity
+// (plan §16): MTA_OBJECT("counter", Counter) -- at namespace scope. The
+// macro carries its own semicolon.
+#define MTA_OBJECT(Name, Type) \
+    static const bool mta_object_registered_##Type = \
+        ::mta::userdata::Registry<Type>::set_type_name((Name));
 
 // Registers an object method: MTA_METHOD(Type, "name", lambda);
 // The lambda takes self (Type&) as its first parameter.

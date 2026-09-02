@@ -1,4 +1,6 @@
 // userdata/metatables: a counter object with get/set/add methods and __gc.
+// The type identity is declared with MTA_OBJECT (plan §16): stable,
+// compiler-independent, module-aware ("mta.<module>.counter").
 //
 //     local c = counter_create(42)
 //     c:get()   -- 42
@@ -14,6 +16,10 @@ struct Counter
 {
     double value = 0;
 };
+
+// Stable type identity: the metatable name is derived from this declared
+// name, never from typeid(T).name().
+MTA_OBJECT("counter", Counter)
 
 // Registers the type's methods. Registry calls it once per VM
 // (each resource has its own lua_State and its own metatable).

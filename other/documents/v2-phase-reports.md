@@ -311,3 +311,44 @@ newest last.
   behaviour).
 - **NEXT**: PHASE 8 — Userdata V2: stable explicit userdata type ids
   (plan §16), `[features]` consumption.
+
+## PHASE 8 — Userdata V2 (stable type identity, [features] consumption)
+
+- **PHASE**: 8 — stable explicit userdata type identifiers (plan §16) and
+  the `[features]` subsystem switches of config/module.toml (plan §4).
+- **CHANGED**:
+  - `sdk/objects/userdata.hpp`: the metatable identity is no longer
+    `typeid(T).name()`. `Registry<T>::set_type_name()` sets an explicit
+    id; `identity()` composes `mta.<module>.<type>` (module-aware — two
+    SDK modules in one server cannot collide on the same type name) and
+    falls back to a compiler-dependent name with a warning when no explicit
+    id was declared. `check()` argument errors name the declared type
+    ("expected counter, got number") instead of a generic "module object".
+  - `source/functions/objects/counter.cpp`: the sample type is declared
+    with `MTA_OBJECT("counter", Counter)`.
+  - `CMakeLists.txt`: `[async]` and `[features]` values now honor explicit
+    cache overrides (`-DSDK_ASYNC_WORKERS=4`, `-DSDK_FEATURE_ASYNC=OFF`,
+    mirroring the SDK_UNITY/SDK_LTO pattern — a plain TOML normal variable
+    would otherwise shadow -D entries).
+- **ADDED**:
+  - `MTA_OBJECT(Name, Type)` macro (namespace-scope declaration returning
+    true, usable as a static initializer; the first id wins, conflicting
+    re-declarations log an error and are ignored).
+  - `[features]` consumption: switches compile in as
+    `SDK_FEATURE_ASYNC/_USERDATA/_EVENTS/_OBJECTS` and exclude the bundled
+    sample functions of a disabled subsystem from the module AND the test
+    binary (`functions/async`, `functions/objects`, `functions/events`).
+  - `060_features.lua`: type validation names the declared type.
+- **REMOVED**: nothing public; `typeid(T).name()` remains only as a
+  documented, warning-logged fallback for types without MTA_OBJECT.
+- **TESTS**: `ctest --preset win-mingw` 3/3 passed (162 assertions).
+  Feature gating verified by configure with `-DSDK_FEATURE_EVENTS=OFF
+  -DSDK_FEATURE_OBJECTS=OFF`: the unity file lost trigger_demo/counter and
+  the defines flipped to 0; restored afterwards.
+- **RISKS**: the metatable identity is computed once per process from the
+  module name — modules built with a name change must not mix object types
+  across builds (acceptable: the module name comes from module.toml, the
+  same source of truth as the DLL name); MTA_OBJECT must appear in exactly
+  one TU per type.
+- **NEXT**: PHASE 9 — Native MTA types (conservative: the ILuaModuleManager10
+  ABI exposes no element API; only VM lookup by resource name).

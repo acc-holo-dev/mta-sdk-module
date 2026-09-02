@@ -8,6 +8,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Userdata V2 (plan §16): `MTA_OBJECT("counter", Counter)` declares a
+  stable, deterministic, compiler-independent type identity; the metatable
+  name is module-aware (`mta.<module>.<type>`) so two modules cannot
+  collide, argument errors name the declared type, and a type without an
+  explicit name falls back to a compiler-dependent identity with a warning.
+- `[features]` consumption (plan §4): subsystem switches compile in as
+  `SDK_FEATURE_*` definitions and exclude the bundled sample functions of a
+  disabled subsystem from the module and the test binary; explicit cache
+  overrides win (`-DSDK_FEATURE_ASYNC=OFF`, `-DSDK_ASYNC_WORKERS=4`,
+  `-DSDK_ASYNC_QUEUE=1024`).
 - Timer V2 (plan §15): `mta::timer::after(L, delay, fn)` (one-shot) and
   `mta::timer::every(L, delay, fn)` (repeating) return a `Timer` handle
   (`cancel()/valid()/id()`); timers are resource-aware — a resource stop

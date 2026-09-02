@@ -8,6 +8,13 @@ test_assert(c:get() == 100, "counter set")
 test_assert(c:add(5) == 105, "counter add returns new value")
 test_assert(c:get() == 105, "counter add persisted")
 
+-- stable type identity (plan §16): type validation names the declared type
+local unbound_get = c.get
+local ok_t, err_t = pcall(unbound_get, 42)
+test_assert(ok_t == false, "calling get without a counter fails")
+test_assert(tostring(err_t):find("counter", 1, true) ~= nil,
+    "the error names the declared type: " .. tostring(err_t))
+
 -- events: the module triggers a Lua event
 local events = {}
 root = {}
