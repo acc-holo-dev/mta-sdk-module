@@ -162,8 +162,7 @@ mta-module-sdk/
 │
 ├── CMakeLists.txt
 ├── CMakePresets.json
-├── README.md
-└── LICENSE
+└── README.md
 ```
 
 ## Назначение каталогов
