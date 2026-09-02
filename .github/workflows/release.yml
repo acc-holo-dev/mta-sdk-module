@@ -90,4 +90,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
-          generate_release_notes: true
+          # The release body comes from the v* tag annotation. Do not use
+          # generate_release_notes here: this step runs per matrix leg and
+          # regenerated PR notes would be appended per leg.
+          generate_release_notes: false
