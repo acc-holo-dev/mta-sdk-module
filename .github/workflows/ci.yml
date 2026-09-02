@@ -155,7 +155,7 @@ jobs:
           --suppress=nullPointer
           --suppress=uninitMemberVar
           --suppress=uninitMemberVarNoCtor
-          -DMTA_OBJECT= -DMTA_METHOD= -DMTA_STATE= -DMTA_LUA_FUNCTION= -DMTA_LUA_FUNC= -DMTA_FUNCTION= -DSDK_MODULE_VERSION=1 -DSDK_MODULE_TITLE=base -DSDK_AUTHOR=Developer
+          -DMTA_OBJECT= -DMTA_METHOD= -DMTA_STATE= -DMTA_LUA_FUNCTION= -DMTA_LUA_FUNC= -DMTA_FUNCTION= -DSDK_MODULE_VERSION=1 -DSDK_MODULE_TITLE=base -DSDK_MODULE_AUTHOR=Developer
           --error-exitcode=1
           -I source -I other/third_party/lua/src -I other/third_party/mta-sdk
           --quiet source

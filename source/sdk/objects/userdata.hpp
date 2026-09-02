@@ -326,7 +326,10 @@ private:
         static inline F fn{};
         static inline const char *registered_name = nullptr;
 
-        static int trampoline(lua_State *L) noexcept
+        // Deliberately NOT noexcept: protected_call_named ends in
+        // luaL_error (longjmp) and a longjmp out of a noexcept function is
+        // a fail-fast crash on MSVC — same rule as protect.hpp.
+        static int trampoline(lua_State *L)
         {
             // Name the running method and record the resource: argument
             // errors render "bad argument #2 to 'set' (expected number, got
