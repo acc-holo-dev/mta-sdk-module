@@ -66,6 +66,7 @@ The module identity lives in exactly one file — config/module.toml:
 name = "my_mod"        # -> my_mod.dll / my_mod.so
 title = "My Module"
 author = "Jane Doe"
+version = "2.1.0"      # the Module version float (2.1) in the load diagnostic
 ```
 
 The binary name, the CMake target names, the registration metadata, `mta
@@ -86,7 +87,7 @@ nothing is duplicated in C++ sources. (CMake cache variables
    the four separate version entities:
 
 ```
-module: loaded my_mod (module 0.1, sdk 1.0.0, abi 1; MTA 1.6.0-9.21788.0)
+module: loaded my_mod (module 2.1, sdk 1.0.0, abi 1; MTA 1.6.0-9.21788.0)
 ```
 
 ## Step 7. Check in Lua
