@@ -23,3 +23,6 @@ CMakeLists.txt text eol=lf
 
 # Windows batch files keep CRLF.
 *.bat text eol=crlf
+
+# POSIX shell scripts must keep LF even on Windows checkouts.
+other/tools/mta/mta text eol=lf
