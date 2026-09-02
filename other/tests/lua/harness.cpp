@@ -166,6 +166,9 @@ int test_assert(lua_State *lua_vm)
     if (condition)
     {
         ++g_passed;
+        // Progress line per assertion: with unbuffered stdout it survives a
+        // fail-fast crash, so the CI log pins the exact failing call site.
+        std::printf("  ok %d (line %d)\n", g_passed, line);
         return 0;
     }
 
