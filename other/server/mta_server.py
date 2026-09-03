@@ -543,25 +543,44 @@ class ServerProcess:
     Windows: the server shares the harness console. Output is read from the
     console buffer (the full scrollback); commands are typed into the console
     input buffer through Win32 key injection.
-    Linux: the headless server reads commands from stdin and writes to
-    stdout; a reader thread captures output from the stdout pipe.
+    Linux: the headless server runs on a pseudo-terminal (pty) so it behaves
+    like a console (line-buffered output, no stdout pipe buffering); a reader
+    thread captures output from the pty master and commands are written to it.
     """
 
-    def __init__(self, process: "subprocess.Popen", platform: str) -> None:
+    def __init__(self, process: "subprocess.Popen", platform: str, master_fd: int | None = None) -> None:
         self.process = process
         self.platform = platform
         self._lines: list[str] = []
         self._reader: threading.Thread | None = None
+        self._master_fd = master_fd
         if platform == "linux":
             self._reader = threading.Thread(target=self._read_loop, daemon=True)
             self._reader.start()
 
     def _read_loop(self) -> None:
+        # Read from the pty master until EOF, splitting on newlines and keeping
+        # a partial trailing line. The pty delivers the server's output as it
+        # is written (line-buffered), so markers arrive in real time.
+        buf = b""
         try:
-            for raw in self.process.stdout:
-                self._lines.append(raw.rstrip("\r\n"))
-        except Exception:
+            while True:
+                chunk = os.read(self._master_fd, 4096)
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    self._lines.append(line.decode("utf-8", "replace").rstrip("\r"))
+        except OSError:
             pass
+        finally:
+            if buf:
+                self._lines.append(buf.decode("utf-8", "replace").rstrip("\r"))
+            try:
+                os.close(self._master_fd)
+            except OSError:
+                pass
 
     @property
     def returncode(self):
@@ -575,7 +594,7 @@ class ServerProcess:
 
     def send(self, text: str) -> None:
         # The console command needs its submit key: Enter (\r) on the Windows
-        # console, a newline on the Linux stdin pipe.
+        # console, a newline on the Linux pty.
         if self.platform == "windows":
             if not text.endswith("\r"):
                 text += "\r"
@@ -584,9 +603,8 @@ class ServerProcess:
         if not text.endswith("\n"):
             text += "\n"
         try:
-            self.process.stdin.write(text)
-            self.process.stdin.flush()
-        except (BrokenPipeError, OSError):
+            os.write(self._master_fd, text.encode("utf-8"))
+        except OSError:
             pass
 
     def poll(self):
@@ -610,8 +628,10 @@ def start_server(info: dict, server_root: Path) -> ServerProcess:
     quits otherwise, and it reads commands from the console input buffer), so
     the harness ensures a console exists, points the server's stdin/stdout at
     it (CONIN$/CONOUT$) and drives it through the same console.
-    Linux: the headless server reads commands from stdin and writes to stdout;
-    the harness pipes both and captures stdout.
+    Linux: the headless server runs on a pseudo-terminal (pty). A plain pipe
+    would block-buffer the server's stdout, so its markers would not arrive in
+    real time; the pty makes it line-buffered like a real console. The harness
+    reads output from and writes commands to the pty master.
     """
     ensure_console()
     if os.name == "nt":
@@ -639,16 +659,19 @@ def start_server(info: dict, server_root: Path) -> ServerProcess:
         kernel32.CloseHandle(stdout_handle)
         return ServerProcess(process, "windows")
 
+    import pty  # Unix-only; only reached on the Linux path.
+
+    master_fd, slave_fd = pty.openpty()
     process = subprocess.Popen(
         [info["server_exe"]],
         cwd=str(server_root),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        close_fds=True,
     )
-    return ServerProcess(process, "linux")
+    os.close(slave_fd)
+    return ServerProcess(process, "linux", master_fd)
 
 
 def run_server(info: dict, server_root: Path) -> RunResult:
