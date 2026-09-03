@@ -53,6 +53,22 @@ void write_warn(std::string_view message);
 void write_error(std::string_view message);
 void write_debug(lua_State *lua_vm, std::string_view message);
 
+namespace detail
+{
+// Reusable per-thread formatting buffer. Reusing the ostringstream avoids a
+// fresh heap allocation on every log call, and view() (C++20) avoids the
+// str() copy -- the hot path is then allocation-free for the common case.
+// The returned view is valid only until the next call on this thread, which
+// is exactly how the write_* functions consume it (synchronously).
+inline std::ostringstream &log_stream()
+{
+    thread_local std::ostringstream stream;
+    stream.str("");
+    stream.clear();
+    return stream;
+}
+} // namespace detail
+
 template <typename... Args>
 void info(Args &&...args)
 {
@@ -62,9 +78,9 @@ void info(Args &&...args)
         {
             return;
         }
-        std::ostringstream stream;
+        std::ostringstream &stream = detail::log_stream();
         (stream << ... << std::forward<Args>(args));
-        write_info(stream.str());
+        write_info(stream.view());
     }
 }
 
@@ -77,9 +93,9 @@ void warn(Args &&...args)
         {
             return;
         }
-        std::ostringstream stream;
+        std::ostringstream &stream = detail::log_stream();
         (stream << ... << std::forward<Args>(args));
-        write_warn(stream.str());
+        write_warn(stream.view());
     }
 }
 
@@ -92,9 +108,9 @@ void error(Args &&...args)
         {
             return;
         }
-        std::ostringstream stream;
+        std::ostringstream &stream = detail::log_stream();
         (stream << ... << std::forward<Args>(args));
-        write_error(stream.str());
+        write_error(stream.view());
     }
 }
 
@@ -107,9 +123,9 @@ void debug(lua_State *lua_vm, Args &&...args)
         {
             return;
         }
-        std::ostringstream stream;
+        std::ostringstream &stream = detail::log_stream();
         (stream << ... << std::forward<Args>(args));
-        write_debug(lua_vm, stream.str());
+        write_debug(lua_vm, stream.view());
     }
 }
 
@@ -125,9 +141,9 @@ void debug(Args &&...args)
         {
             return;
         }
-        std::ostringstream stream;
+        std::ostringstream &stream = detail::log_stream();
         (stream << ... << std::forward<Args>(args));
-        write_debug(nullptr, stream.str());
+        write_debug(nullptr, stream.view());
     }
 }
 } // namespace mta::log
