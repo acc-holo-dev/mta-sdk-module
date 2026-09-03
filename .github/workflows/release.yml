@@ -71,14 +71,14 @@ jobs:
       - name: Test (unit + lua)
         run: python other/tools/mta/cli.py test --preset ${{ matrix.preset }} all
 
-      # The pipeline runs integration before packaging. The pinned
-      # MTA server build is Windows-only (other/server/: platform "windows",
-      # MTA Server64.exe, msiexec-provisioned 7-Zip), so the harness can run
-      # on the MinGW target — the environment's "relevant integration
-      # tests" allows (it builds the module via the default win-mingw preset).
-      # The step is blocking: a failure here stops packaging and publishing.
+      # The pipeline runs integration before packaging. The pinned MTA server
+      # has a Windows build (MTA Server64.exe, msiexec-provisioned 7-Zip) and
+      # a Linux build (multitheftauto_linux_* tarball, headless + stdin), so
+      # the harness runs on both the win-mingw and linux-gcc targets -- the
+      # environment's "relevant integration tests". Blocking: a failure here
+      # stops packaging and publishing on that leg.
       - name: Integration (real server, blocking)
-        if: matrix.preset == 'win-mingw'
+        if: matrix.preset == 'win-mingw' || matrix.preset == 'linux-gcc'
         run: |
           python other/tools/mta/cli.py server install
           python other/tools/mta/cli.py test integration

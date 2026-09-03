@@ -27,11 +27,12 @@ scenario plus the stale-generation regression to report PASS, fails on
 any stale-delivery marker, and adds the two harness-side scenarios (module
 unload at graceful shutdown, shutdown with active workers).
 
-The pinned build identity lives in PINNED below and is recorded (with the
-download checksum) into install.json after a successful install. Server
-binaries are never committed (see .gitignore). No developer's global MTA
-installation is used; everything runs from other/server/servers/<build> and
-a fresh temp directory per test run (cleaned up afterwards).
+The pinned build identity lives in PINNED_WINDOWS / PINNED_LINUX (chosen for
+the host by pinned_build()) and is recorded (with the download checksum) into
+install.json after a successful install. Server binaries are never committed
+(see .gitignore). No developer's global MTA installation is used; everything
+runs from other/server/servers/<build> and a fresh temp directory per test
+run (cleaned up afterwards).
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -61,11 +63,12 @@ INSTALL_JSON = SERVER_DIR / "install.json"
 PID_JSON = SERVER_DIR / "server.pid"
 LOGS_DIR = SERVER_DIR / "logs"
 
-# Pinned server build (never "latest"; the exact identity below is
-# what the harness installs and what install.json records). Windows x64
-# server, 1.6 release line, nightly.mtasa.com. The expected_sha256 pins the
-# download: an archive that does not match is rejected before extraction.
-PINNED = {
+# Pinned server builds (never "latest"; the exact identity below is what the
+# harness installs and what install.json records). One entry per supported
+# host platform, 1.6 release line, nightly.mtasa.com. The expected_sha256 pins
+# the download: an archive that does not match is rejected before extraction.
+# pinned_build() selects the entry for the current host.
+PINNED_WINDOWS = {
     "platform": "windows",
     "architecture": "x64",
     "branch": "1.6",
@@ -75,6 +78,22 @@ PINNED = {
     "url": "https://nightly.mtasa.com/mtasa_x64-1.6-rc-24140-20260820.exe",
     "expected_sha256": "113fb8ea5814a9c23cbb08dd55e3f91548a82f3a09f5ec562dd0f01fd981c5cc",
 }
+
+PINNED_LINUX = {
+    "platform": "linux",
+    "architecture": "x64",
+    "branch": "1.6",
+    "build": "24140",
+    "build_date": "20260820",
+    "filename": "multitheftauto_linux_x64-1.6.0-rc-24140.tar.gz",
+    "url": "https://nightly.mtasa.com/multitheftauto_linux_x64-1.6.0-rc-24140.tar.gz",
+    "expected_sha256": "48e5e7ea4be9497d2c2ba606c241c52d419daacb320462c4ed76c756c65dc69a",
+}
+
+
+def pinned_build() -> dict:
+    """The pinned server build for the current host platform."""
+    return PINNED_LINUX if os.name != "nt" else PINNED_WINDOWS
 
 # NSIS extraction tool. The MTA installer ignores /D when an MTA install is
 # already registered on the machine (it would touch the developer's global
@@ -220,7 +239,9 @@ def download(url: str, target: Path, attempts: int = 3) -> Path:
 
 
 def find_server_exe(base: Path) -> Path | None:
-    for name in ("mta-server64.exe", "mta-server.exe", "MTA Server.exe"):
+    # Windows ships mta-server64.exe; the Linux tarball ships a bare
+    # mta-server64 (no extension). Search both spellings.
+    for name in ("mta-server64.exe", "mta-server64", "mta-server.exe", "mta-server", "MTA Server.exe"):
         matches = list(base.rglob(name))
         if matches:
             return matches[0]
@@ -251,29 +272,29 @@ def sevenzip_exe() -> Path:
     return exe
 
 
-def cmd_install(update: bool) -> int:
-    if INSTALL_JSON.is_file() and not update:
-        out("Already installed:")
-        cmd_version()
-        return 0
+def extract_server(pinned: dict, archive: Path, install_dir: Path) -> str:
+    """Extract the pinned server archive into install_dir.
 
-    archive = DOWNLOADS / PINNED["filename"]
-    if not archive.is_file():
-        download(PINNED["url"], archive)
-    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    expected = PINNED.get("expected_sha256")
-    if expected and digest != expected:
-        die(
-            f"the downloaded server archive does not match the pinned checksum:\n"
-            f"  downloaded: {digest}\n  expected:   {expected}\n"
-            f"Delete {archive} and re-run the install if the pinned build was updated."
+    Windows: the MTA installer is unpacked directly with a locally
+    provisioned 7-Zip (its manifest requires elevation, so the harness
+    extracts the payload instead of running it). Linux: the server ships as a
+    tar.gz, extracted with the system tar.
+
+    Returns a diagnostic line used by the caller when no server executable is
+    found afterwards.
+    """
+    if os.name != "nt":
+        result = subprocess.run(
+            ["tar", "xzf", str(archive), "-C", str(install_dir)],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
         )
-
-    install_dir = INSTALL_ROOT / f"mtasa-{PINNED['build']}"
-    if install_dir.exists():
-        shutil.rmtree(install_dir)
-    install_dir.mkdir(parents=True)
-
+        return (
+            "tar extraction produced no server executable; "
+            f"tar output: {(result.stdout or result.stderr or '')[-400:]}"
+        )
     sevenzip = sevenzip_exe()
     out(f"Extracting {archive.name} (direct payload extraction, isolated dir) ...")
     result = subprocess.run(
@@ -282,21 +303,50 @@ def cmd_install(update: bool) -> int:
         text=True,
         timeout=600,
     )
+    return (
+        f"7-Zip extraction produced no server executable; "
+        f"7z output: {(result.stdout or result.stderr or '')[-400:]}"
+    )
+
+
+def cmd_install(update: bool) -> int:
+    pinned = pinned_build()
+    if INSTALL_JSON.is_file() and not update:
+        out("Already installed:")
+        cmd_version()
+        return 0
+
+    archive = DOWNLOADS / pinned["filename"]
+    if not archive.is_file():
+        download(pinned["url"], archive)
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    expected = pinned.get("expected_sha256")
+    if expected and digest != expected:
+        die(
+            f"the downloaded server archive does not match the pinned checksum:\n"
+            f"  downloaded: {digest}\n  expected:   {expected}\n"
+            f"Delete {archive} and re-run the install if the pinned build was updated."
+        )
+
+    install_dir = INSTALL_ROOT / f"mtasa-{pinned['build']}"
+    if install_dir.exists():
+        shutil.rmtree(install_dir)
+    install_dir.mkdir(parents=True)
+
+    diagnostic = extract_server(pinned, archive, install_dir)
     server_exe = find_server_exe(install_dir)
     if server_exe is None:
-        die(
-            f"7-Zip extraction produced no server executable under {install_dir}; "
-            f"7z output: {(result.stdout or result.stderr or '')[-400:]}"
-        )
+        die(diagnostic)
 
     INSTALL_JSON.write_text(
         json.dumps(
-            {**PINNED, "sha256": digest, "install_dir": str(server_exe.parent), "server_exe": str(server_exe)},
+            {**pinned, "sha256": digest, "install_dir": str(server_exe.parent), "server_exe": str(server_exe)},
             indent=2,
         ),
         encoding="utf-8",
     )
     out(f"Server executable: {server_exe}")
+    out(f"Installed; identity recorded in other/server/install.json")
     out("Installed; identity recorded in other/server/install.json")
     return 0
 
@@ -464,9 +514,10 @@ def cmd_test(args) -> int:
     finally:
         log_copy.mkdir(parents=True, exist_ok=True)
         # The pinned server runs without a configured log file; the console
-        # scrollback IS the run log.
+        # scrollback (Windows) / captured stdout (Linux) IS the run log.
         console_log = log_copy / "server.log"
-        console_log.write_text("\n".join(console_buffer_lines()), encoding="utf-8", errors="replace")
+        log_text = "\n".join(result.tail) if result is not None else ""
+        console_log.write_text(log_text, encoding="utf-8", errors="replace")
         out(f"Log kept at: {console_log}")
         shutil.rmtree(temp_root, ignore_errors=True)
         out("Temporary server directory cleaned up")
@@ -475,18 +526,83 @@ def cmd_test(args) -> int:
     return finalize_run(result, console_log)
 
 
-def run_server(info: dict, server_root: Path) -> RunResult:
-    # The Windows MTA server requires a real console for both output and
-    # input: its startup verifies the stdout handle with
-    # GetConsoleScreenBufferInfo and quits otherwise, and it reads commands
-    # (and the quit command) from the console input buffer. The harness
-    # therefore ensures a console exists, points the server's stdin/stdout
-    # at that console (CONIN$/CONOUT$) and drives it through the same
-    # console; the console buffer (full scrollback) is the source of truth
-    # for integration markers.
+class ServerProcess:
+    """Platform-agnostic handle to a running MTA server.
+
+    Windows: the server shares the harness console. Output is read from the
+    console buffer (the full scrollback); commands are typed into the console
+    input buffer through Win32 key injection.
+    Linux: the headless server reads commands from stdin and writes to
+    stdout; a reader thread captures output from the stdout pipe.
+    """
+
+    def __init__(self, process: "subprocess.Popen", platform: str) -> None:
+        self.process = process
+        self.platform = platform
+        self._lines: list[str] = []
+        self._reader: threading.Thread | None = None
+        if platform == "linux":
+            self._reader = threading.Thread(target=self._read_loop, daemon=True)
+            self._reader.start()
+
+    def _read_loop(self) -> None:
+        try:
+            for raw in self.process.stdout:
+                self._lines.append(raw.rstrip("\r\n"))
+        except Exception:
+            pass
+
+    @property
+    def returncode(self):
+        return self.process.returncode
+
+    def read_lines(self) -> list[str]:
+        """Full output accumulated so far. Callers deduplicate by tail position."""
+        if self.platform == "windows":
+            return console_buffer_lines()
+        return list(self._lines)
+
+    def send(self, text: str) -> None:
+        # The console command needs its submit key: Enter (\r) on the Windows
+        # console, a newline on the Linux stdin pipe.
+        if self.platform == "windows":
+            if not text.endswith("\r"):
+                text += "\r"
+            inject_console_text(text)
+            return
+        if not text.endswith("\n"):
+            text += "\n"
+        try:
+            self.process.stdin.write(text)
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+
+    def poll(self):
+        return self.process.poll()
+
+    def wait(self, timeout: float):
+        return self.process.wait(timeout=timeout)
+
+    def kill(self) -> None:
+        if self.platform == "windows":
+            subprocess.run(["taskkill", "/PID", str(self.process.pid), "/T", "/F"], capture_output=True)
+        else:
+            self.process.kill()
+
+
+def start_server(info: dict, server_root: Path) -> ServerProcess:
+    """Start the pinned server and return a platform-agnostic handle.
+
+    Windows: the server requires a real console for both output and input (its
+    startup verifies the stdout handle with GetConsoleScreenBufferInfo and
+    quits otherwise, and it reads commands from the console input buffer), so
+    the harness ensures a console exists, points the server's stdin/stdout at
+    it (CONIN$/CONOUT$) and drives it through the same console.
+    Linux: the headless server reads commands from stdin and writes to stdout;
+    the harness pipes both and captures stdout.
+    """
     ensure_console()
-    startupinfo = None
-    close_fds = True
     if os.name == "nt":
         # Both handles need GENERIC_READ|GENERIC_WRITE: the server verifies
         # its stdout handle with GetConsoleScreenBufferInfo, which a
@@ -502,25 +618,44 @@ def run_server(info: dict, server_root: Path) -> RunResult:
         startupinfo.hStdInput = stdin_handle
         startupinfo.hStdOutput = stdout_handle
         startupinfo.hStdError = stdout_handle
-        close_fds = False
-    process = subprocess.Popen(
-        [info["server_exe"], "-t"],
-        cwd=str(server_root),
-        startupinfo=startupinfo,
-        close_fds=close_fds,
-    )
-    if os.name == "nt":
+        process = subprocess.Popen(
+            [info["server_exe"], "-t"],
+            cwd=str(server_root),
+            startupinfo=startupinfo,
+            close_fds=False,
+        )
         kernel32.CloseHandle(stdin_handle)
         kernel32.CloseHandle(stdout_handle)
+        return ServerProcess(process, "windows")
+
+    process = subprocess.Popen(
+        [info["server_exe"]],
+        cwd=str(server_root),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    return ServerProcess(process, "linux")
+
+
+def run_server(info: dict, server_root: Path) -> RunResult:
+    server = start_server(info, server_root)
     result: RunResult | None = None
     try:
-        result = wait_for_results(process)
+        result = wait_for_results(server)
         return result
     finally:
-        graceful, returncode = stop_process(process)
+        graceful, returncode = stop_process(server)
         if result is not None:
             result.graceful = graceful
             result.returncode = returncode
+            # Pick up anything printed between the last poll and the shutdown
+            # (the graceful-stop output is part of the evidence, e.g. the
+            # "Server stopped!" line the shutdown scenarios judge on).
+            tail = server.read_lines()
+            result.tail.extend(tail[len(result.tail):])
 
 
 def ensure_console() -> None:
@@ -643,7 +778,7 @@ def inject_console_text(text: str) -> None:
         out(f"Key injection incomplete (ok={ok}, written={written.value})")
 
 
-def wait_for_results(process) -> RunResult:
+def wait_for_results(server: ServerProcess) -> RunResult:
     """Runs the full scenario choreography against the live server console.
 
     Generation markers emitted by the Lua suite drive the harness: STOP_NOW
@@ -659,9 +794,9 @@ def wait_for_results(process) -> RunResult:
     done_at: float | None = None
 
     while time.time() < deadline:
-        # The server shares our console; its whole output history is in the
-        # console buffer. Consume only the lines appended since last poll.
-        lines = console_buffer_lines()
+        # Consume only the lines appended since the last poll (the console
+        # scrollback on Windows, the accumulated stdout on Linux).
+        lines = server.read_lines()
         for line in lines[len(result.tail):]:
             result.tail.append(line)
             for marker in NEGATIVE_MARKERS:
@@ -683,11 +818,11 @@ def wait_for_results(process) -> RunResult:
                 phase = "stopping"
                 stop_sent_at = time.time()
                 out("Generation 1 done; stopping the resource (resource stop/start cycle) ...")
-                inject_console_text(f"stop {TEST_RESOURCE_NAME}\r")
+                server.send(f"stop {TEST_RESOURCE_NAME}")
             if phase == "gen2" and MARK_RESTART_NOW in line:
                 phase = "gen3"
                 out("Generation 2 done; restarting the resource (stale-generation regression cycle) ...")
-                inject_console_text(f"restart {TEST_RESOURCE_NAME}\r")
+                server.send(f"restart {TEST_RESOURCE_NAME}")
             if phase == "gen3" and MARK_RUN_COMPLETE in line:
                 phase = "done"
                 done_at = time.time()
@@ -706,14 +841,14 @@ def wait_for_results(process) -> RunResult:
             and time.time() - stop_sent_at >= STOP_TO_START_DELAY
         ):
             out("Starting the resource again ...")
-            inject_console_text(f"start {TEST_RESOURCE_NAME}\r")
+            server.send(f"start {TEST_RESOURCE_NAME}")
             phase = "gen2"
 
         if phase == "done" and done_at is not None and time.time() - done_at >= SHUTDOWN_SETTLE:
             result.run_complete = True
             break
 
-        if process.poll() is not None:
+        if server.poll() is not None:
             result.failed = True
             result.failure_reason = "the server exited before the integration run completed"
             out("The server exited before the integration result; console tail:")
@@ -760,11 +895,8 @@ def evaluate_shutdown_scenarios(result: RunResult) -> list[tuple[str, bool, str]
 
 def finalize_run(result: RunResult, console_log: Path) -> int:
     """Validates one finished run: scenario coverage, stale markers, shutdown."""
-    # Pick up everything printed between the last poll and the shutdown
-    # (the graceful-stop output is part of the evidence).
-    tail = console_buffer_lines()
-    result.tail.extend(tail[len(result.tail):])
-
+    # result.tail already carries the full run including the graceful-shutdown
+    # output (run_server picked up the final lines before returning).
     ok = not result.failed and result.run_complete
 
     # Negative markers anywhere in the log fail the run (# stale objects must never deliver into a fresh generation).
@@ -828,7 +960,7 @@ def dump_tail(tail: list[str]) -> None:
         out("  " + line)
 
 
-def stop_process(process) -> tuple[bool, int | None]:
+def stop_process(server: ServerProcess) -> tuple[bool, int | None]:
     """Graceful stop first: console commands let MTA shut down cleanly (the
     module's ShutdownModule runs), then force-kill after a grace period.
 
@@ -836,35 +968,32 @@ def stop_process(process) -> tuple[bool, int | None]:
     """
     graceful = False
     try:
-        if process.poll() is None:
-            inject_console_text("exit\r")
+        if server.poll() is None:
+            server.send("exit")
             # A shutdown worker may still be running: the SDK joins active
             # workers in ShutdownModule (safe shutdown), so the
             # graceful window must outlast the 60 s scenario worker.
             try:
-                process.wait(timeout=120)
+                server.wait(timeout=120)
                 out("Server shut down gracefully (console exit)")
-                return True, process.returncode
+                return True, server.returncode
             except subprocess.TimeoutExpired:
                 pass
-            inject_console_text("q")
+            server.send("q")
             try:
-                process.wait(timeout=20)
+                server.wait(timeout=20)
                 out("Server shut down gracefully (console Q)")
-                return True, process.returncode
+                return True, server.returncode
             except subprocess.TimeoutExpired:
                 pass
-            if os.name == "nt":
-                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
-            else:
-                process.kill()
+            server.kill()
         try:
-            process.wait(timeout=10)
+            server.wait(timeout=10)
         except subprocess.TimeoutExpired:
             pass
     except Exception:
         pass
-    return graceful, process.returncode
+    return graceful, server.returncode
 
 
 # --- entry ------------------------------------------------------------------

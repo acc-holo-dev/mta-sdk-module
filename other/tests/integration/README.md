@@ -20,6 +20,10 @@ Each run creates a throwaway server directory, keeps the console log in
 `other/server/logs/<timestamp>/server.log`, and exits 0 only when **every**
 scenario below reports PASS.
 
+The pinned server has Windows and Linux builds (`other/server/`: console via
+Win32 key injection on Windows, a stdin/stdout pipe on the headless Linux
+server); CI runs the suite on both platforms as a blocking gate.
+
 ## How scenarios are reported
 
 Every scenario prints its own marker line to the server log:

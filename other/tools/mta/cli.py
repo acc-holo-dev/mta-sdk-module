@@ -173,14 +173,26 @@ def preset_names(root: Path) -> list[str]:
 
 
 def output_binary(root: Path, preset: str, config: dict) -> Path | None:
-    """The built module binary, or None when it was not built (yet)."""
+    """The built module binary, or None when it was not built (yet).
+
+    The build writes the binary to build/<preset>/module/<platform>-<arch>/
+    (the arch tag comes from cmake/core/platform.cmake). Rather than hard-code
+    an architecture, scan every arch subdirectory so the CLI works on any
+    target (x64, arm64, ...) the toolchain produces.
+    """
     name = require_module_table(config)["name"]
     system = py_platform.system()
-    platform_tag = "win" if system == "Windows" else "linux"
     ext = ".dll" if system == "Windows" else ".so"
-    arch = "x64"
-    candidate = root / "build" / preset / "module" / f"{platform_tag}-{arch}" / (name + ext)
-    return candidate if candidate.is_file() else None
+    module_dir = root / "build" / preset / "module"
+    if not module_dir.is_dir():
+        return None
+    for arch_dir in module_dir.iterdir():
+        if not arch_dir.is_dir():
+            continue
+        candidate = arch_dir / (name + ext)
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 # --- mta init -------------------------------------------------------------------
@@ -833,7 +845,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_package)
 
     p = sub.add_parser("server", help="manage the MTA server test environment")
-    p.add_argument("subcommand", choices=["install", "update", "version", "start", "stop"])
+    p.add_argument(
+        "subcommand",
+        choices=["install", "update", "version", "start", "stop", "test"],
+        help="install/update/version/start/stop manage the pinned server; "
+        "test runs the real-server integration suite",
+    )
     p.add_argument("server_args", nargs="*")
     p.set_defaults(func=cmd_server)
 

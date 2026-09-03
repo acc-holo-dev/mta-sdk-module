@@ -136,7 +136,7 @@ add_library(sdk_core OBJECT ${SDK_SOURCES})
 # Single source of truth for the MODULE version float (Module version is
 # its own entity, separate from the SDK version that project(VERSION) now
 # carries): the [module] version in config/module.toml. "2.1.0" becomes the
-# float "2.0" reported by sample_version / module_details / InitModule --
+# float "2.1" reported by sample_version / module_details / InitModule --
 # never a hard-coded constant in module.cpp.
 if(MODULE_CFG_module_version MATCHES "^([0-9]+)\\.([0-9]+)")
   set(SDK_MODULE_VERSION "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}")

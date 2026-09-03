@@ -611,8 +611,11 @@ struct dispatch_slot
         }
         else
         {
-            // Unreachable: slots without invocable are never selected.
-            raise_error("argument #", J + 1, " is missing");
+            // Unreachable: slots without invocable are never selected. Keep
+            // the message in the plan §7 format so it can never regress into
+            // the old "argument #N is missing" wording.
+            raise_error("bad argument count to '", detail::current_function_name(),
+                        "' (expected at least ", J + 1, " arguments, got ", lua_gettop(L), ")");
         }
     }
 };

@@ -200,3 +200,25 @@ jobs:
         run: |
           python other/tools/mta/cli.py server install
           python other/tools/mta/cli.py test integration
+
+  integration-linux:
+    # Real-server integration on the Linux server build (multitheftauto_linux_*
+    # tarball, other/server/ -- platform "linux", mta-server64). The Linux
+    # server is headless: the harness drives it through a stdin/stdout pipe
+    # instead of a Win32 console. Blocking: a failure here fails CI.
+    name: Real-server integration (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++
+
+      - name: Build the module
+        run: python other/tools/mta/cli.py build --preset linux-gcc
+
+      - name: Install the pinned server and run the integration
+        run: |
+          python other/tools/mta/cli.py server install
+          python other/tools/mta/cli.py test integration
