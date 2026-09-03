@@ -174,7 +174,14 @@ public:
     {
         ensure(L);
         void *memory = lua_newuserdata(L, sizeof(T));
-        T *object = new (memory) T(std::move(value));
+        const int userdata_index = lua_gettop(L);
+        T *object = nullptr;
+        try {
+            object = new (memory) T(std::move(value));
+        } catch (...) {
+            lua_remove(L, userdata_index);  // remove raw userdata before re-throwing
+            throw;
+        }
         luaL_getmetatable(L, identity());
         lua_setmetatable(L, -2);
         return object;

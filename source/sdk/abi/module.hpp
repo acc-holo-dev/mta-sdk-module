@@ -23,7 +23,7 @@ ILuaModuleManager10 *manager() noexcept;
 // The name of the resource owning lua_vm; an empty string when it cannot be
 // determined. Uses the ABI-safe char* manager overload (the std::string
 // overload crosses the DLL boundary with an ABI-sensitive type).
-std::string current_resource_name(lua_State *lua_vm) noexcept;
+std::string current_resource_name(lua_State *lua_vm);
 
 bool initialize(ILuaModuleManager10 *manager, char *module_name, char *author, float *version) noexcept;
 void register_functions(lua_State *lua_vm) noexcept;

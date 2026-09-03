@@ -34,7 +34,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
-#include <vector>
+#include <unordered_set>
 
 namespace mta::resources
 {
@@ -77,7 +77,7 @@ public:
 
 private:
     Hub() = default;
-    std::vector<Sink *> sinks_{};
+    std::unordered_set<Sink *> sinks_{};
     std::unordered_map<std::string, std::uint64_t> generations_{};
 };
 

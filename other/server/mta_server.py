@@ -670,9 +670,7 @@ def start_server(info: dict, server_root: Path) -> ServerProcess:
     Linux: the headless server runs with piped stdin/stdout. It is launched
     under `stdbuf -oL -eL` so its stdout is line-buffered: a plain pipe would
     block-buffer the server's output and its markers would not arrive in real
-    time. (A pty would instead switch the server into its ncurses console UI,
-    which needs a TERM and emits control sequences -- not what the harness
-    parses.)
+    time. A reader thread captures output from the stdout pipe.
     """
     ensure_console()
     if os.name == "nt":

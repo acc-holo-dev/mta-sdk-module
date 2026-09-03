@@ -10,7 +10,7 @@ namespace mta::timer
 {
 namespace
 {
-Timer schedule(lua_State *lua_vm, int delay_ms, int repeat_count,
+Timer schedule(lua_State *lua_vm, int delay_ms, std::int64_t repeat_count,
                std::function<void(std::uint64_t)> fn)
 {
     const std::string resource = mta::module::current_resource_name(lua_vm);
@@ -48,8 +48,7 @@ Timer every(lua_State *lua_vm, int delay_ms, std::int64_t repeat_count,
             std::function<void(std::uint64_t tick)> fn)
 {
     // The scheduler treats a repeat count <= 0 as "until cancelled".
-    return schedule(lua_vm, checked_delay(delay_ms), static_cast<int>(repeat_count),
-                    std::move(fn));
+    return schedule(lua_vm, checked_delay(delay_ms), repeat_count, std::move(fn));
 }
 
 bool Timer::cancel() noexcept

@@ -467,7 +467,11 @@ T pull_arg(lua_State *L, int index)
     }
     else
     {
-        static_assert(!sizeof(U), "unsupported parameter type (see lua/bind.hpp)");
+        static_assert(!sizeof(U), "binder: unsupported parameter type; allowed: bool, int, "
+                                  "double, float, std::string, std::string_view, "
+                                  "std::optional<T>, mta::lua::Argument, mta::lua::Table, "
+                                  "mta::async::Callback, mta::lua::rest_args, mta::lua::context, "
+                                  "mta::Resource");
     }
 }
 
@@ -721,6 +725,9 @@ bool register_typed(const char *name, const char *description, F function)
     using G = std::decay_t<F>;
 
     static_assert(rest_only_last_v<G>, "rest_args may only be the last parameter");
+    static_assert(std::is_assignable_v<decltype(holder<Tag, G>::stored) &, G>,
+                  "MTA_LUA_FUNC lambdas must be assignable (no non-copyable captures); "
+                  "use MTA_LUA_FUNCTION body-style for captures or complex state");
 
     holder<Tag, G>::stored = std::move(function);
     holder<Tag, G>::registered_name = name;

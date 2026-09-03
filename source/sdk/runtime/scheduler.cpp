@@ -419,20 +419,20 @@ Task run(lua_State *lua_vm, std::function<mta::lua::Arguments()> work,
                                            generation);
 }
 
-std::uint64_t Scheduler::post_timer(std::string resource, int delay_ms, int repeat_count,
+std::uint64_t Scheduler::post_timer(std::string resource, int delay_ms, std::int64_t repeat_count,
                                     std::function<void(std::uint64_t)> completion)
 {
     return post_timer_impl(resource, delay_ms, repeat_count, std::move(completion))->id;
 }
 
-timer::Timer Scheduler::post_timer_handle(std::string resource, int delay_ms, int repeat_count,
+timer::Timer Scheduler::post_timer_handle(std::string resource, int delay_ms, std::int64_t repeat_count,
                                           std::function<void(std::uint64_t)> completion)
 {
     return timer::Timer{post_timer_impl(resource, delay_ms, repeat_count, std::move(completion))};
 }
 
 std::shared_ptr<timer::TimerState> Scheduler::post_timer_impl(
-    std::string &resource, int delay_ms, int repeat_count,
+    std::string &resource, int delay_ms, std::int64_t repeat_count,
     std::function<void(std::uint64_t)> completion)
 {
     Timer timer;
@@ -443,6 +443,10 @@ std::shared_ptr<timer::TimerState> Scheduler::post_timer_impl(
     timer.generation = mta::resources::Hub::instance().generation(resource);
     timer.state->generation = timer.generation;
     timer.resource = std::move(resource);
+    if (delay_ms < minimum_timer_delay_ms)
+    {
+        mta::log::warn("scheduler: post_timer delay ", delay_ms, " ms clamped to ", minimum_timer_delay_ms);
+    }
     timer.interval_ms = std::max(delay_ms, minimum_timer_delay_ms);
     timer.repeats_left = repeat_count < 0 ? 0 : repeat_count;
     timer.next_fire = clock_type::now() + std::chrono::milliseconds(timer.interval_ms);

@@ -155,8 +155,8 @@ namespace detail
     const lua_Number value = lua_tonumber(L, normalized);
     if (value != static_cast<lua_Number>(static_cast<lua_Integer>(value)))
     {
-        detail::bad_argument_value(index, std::to_string(value).append(" is not a whole number")
-                                                   .c_str());
+        const std::string msg = std::to_string(value) + " is not a whole number";
+        detail::bad_argument_value(index, msg.c_str());
     }
     return static_cast<lua_Integer>(value);
 }
@@ -176,8 +176,8 @@ namespace detail
     const lua_Number value = lua_tonumber(L, normalized);
     if (value != static_cast<lua_Number>(static_cast<lua_Integer>(value)))
     {
-        detail::bad_argument_value(index, std::to_string(value).append(" is not a whole number")
-                                                   .c_str());
+        const std::string msg = std::to_string(value) + " is not a whole number";
+        detail::bad_argument_value(index, msg.c_str());
     }
     return static_cast<lua_Integer>(value);
 }

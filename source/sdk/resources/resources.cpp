@@ -1,7 +1,5 @@
 #include "sdk/resources/resources.hpp"
 
-#include <algorithm>
-
 namespace mta::resources
 {
 Hub &Hub::instance()
@@ -12,19 +10,12 @@ Hub &Hub::instance()
 
 void Hub::add(Sink &sink)
 {
-    if (std::find(sinks_.begin(), sinks_.end(), &sink) == sinks_.end())
-    {
-        sinks_.push_back(&sink);
-    }
+    sinks_.insert(&sink);
 }
 
 void Hub::remove(Sink &sink) noexcept
 {
-    const auto it = std::find(sinks_.begin(), sinks_.end(), &sink);
-    if (it != sinks_.end())
-    {
-        sinks_.erase(it);
-    }
+    sinks_.erase(&sink);
 }
 
 void Hub::notify_resource_stopping(const std::string &resource)

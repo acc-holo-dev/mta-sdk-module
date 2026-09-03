@@ -26,9 +26,21 @@ namespace
 #error "SDK_MODULE_AUTHOR is missing: set it via SDK_MODULE_AUTHOR in CMakeLists.txt"
 #endif
 
-// Version float ("1.1" for project version 1.1.0), provided by the build
-// system so the module and the CMake package report the same version.
-const float module_version = static_cast<float>(std::atof(SDK_MODULE_VERSION));
+// Locale-independent parse of "X.Y.Z" -> float X.Y.
+// Uses manual digit parsing; avoids std::atof, which is sensitive to LC_NUMERIC.
+float parse_module_version(const char *s)
+{
+    int major = 0, minor = 0;
+    int minor_digits = 0;
+    const char *p = s;
+    while (*p >= '0' && *p <= '9') { major = major * 10 + (*p - '0'); ++p; }
+    if (*p == '.') ++p;
+    while (*p >= '0' && *p <= '9') { minor = minor * 10 + (*p - '0'); ++p; ++minor_digits; }
+    float divisor = 1.0f;
+    for (int i = 0; i < minor_digits; ++i) divisor *= 10.0f;
+    return static_cast<float>(major) + static_cast<float>(minor) / divisor;
+}
+const float module_version = parse_module_version(SDK_MODULE_VERSION);
 
 // Module identity is configured at build time (SDK_MODULE_TITLE /
 // SDK_MODULE_AUTHOR cache variables) -- renaming the module never requires
@@ -69,7 +81,7 @@ ILuaModuleManager10 *manager() noexcept
     return g_module_manager;
 }
 
-std::string current_resource_name(lua_State *lua_vm) noexcept
+std::string current_resource_name(lua_State *lua_vm)
 {
     if (g_module_manager == nullptr || lua_vm == nullptr)
     {
