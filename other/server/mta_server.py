@@ -346,7 +346,6 @@ def cmd_install(update: bool) -> int:
         encoding="utf-8",
     )
     out(f"Server executable: {server_exe}")
-    out(f"Installed; identity recorded in other/server/install.json")
     out("Installed; identity recorded in other/server/install.json")
     return 0
 
@@ -467,6 +466,18 @@ def cmd_test(args) -> int:
     if not mods.is_dir():
         shutil.rmtree(temp_root, ignore_errors=True)
         die(f"unexpected server layout (no mods/deathmatch in {info['install_dir']})")
+
+    # The Linux server tarball ships an empty mods/deathmatch (no default
+    # acl.xml) and the server refuses to start without one; the Windows
+    # installer already places it. Provide the default ACL when missing.
+    acl_xml = mods / "acl.xml"
+    if not acl_xml.is_file():
+        template = SERVER_DIR / "templates" / "acl.xml"
+        if not template.is_file():
+            shutil.rmtree(temp_root, ignore_errors=True)
+            die(f"missing default ACL template: {template}")
+        shutil.copy2(template, acl_xml)
+        out("Installed default acl.xml (the Linux server ships an empty mods/deathmatch)")
 
     # The x64 server loads modules from <server>/x64/modules (SERVER_BIN_PATH_MOD).
     modules_dir = server_root / "x64" / "modules"
