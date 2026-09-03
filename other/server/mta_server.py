@@ -239,17 +239,44 @@ def download(url: str, target: Path, attempts: int = 3) -> Path:
 
 
 def find_server_exe(base: Path) -> Path | None:
-    # Windows ships mta-server64.exe; the Linux tarball ships a bare
+    # Windows ships MTA Server64.exe; the Linux tarball ships a bare
     # mta-server64 (no extension). Search both spellings.
-    for name in ("mta-server64.exe", "mta-server64", "mta-server.exe", "mta-server", "MTA Server.exe"):
-        matches = list(base.rglob(name))
-        if matches:
-            return matches[0]
-    for exe in base.rglob("*.exe"):
-        lowered = exe.name.lower()
-        if "server" in lowered and "uninstall" not in lowered:
-            return exe
+    for name in (
+        "MTA Server64.exe",
+        "mta-server64.exe",
+        "mta-server64",
+        "mta-server.exe",
+        "mta-server",
+        "MTA Server.exe",
+    ):
+        hit = next(base.rglob(name), None)
+        if hit:
+            return hit
+    # Windows fallback: the installer may name the server differently, so
+    # accept any server-named .exe (never the uninstaller).
+    if os.name == "nt":
+        for exe in base.rglob("*.exe"):
+            lowered = exe.name.lower()
+            if "server" in lowered and "uninstall" not in lowered:
+                return exe
     return None
+
+
+def ensure_default_acl(mods: Path) -> None:
+    """Provide a default acl.xml when the installed server did not ship one.
+
+    The Linux server tarball ships an empty mods/deathmatch (no default
+    acl.xml) and the server refuses to start without one; the Windows
+    installer already places it. Never overwrites an existing acl.xml.
+    """
+    acl_xml = mods / "acl.xml"
+    if acl_xml.is_file():
+        return
+    template = SERVER_DIR / "templates" / "acl.xml"
+    if not template.is_file():
+        die(f"missing default ACL template: {template}")
+    shutil.copy2(template, acl_xml)
+    out("Installed default acl.xml (the Linux server ships an empty mods/deathmatch)")
 
 
 def sevenzip_exe() -> Path:
@@ -467,17 +494,7 @@ def cmd_test(args) -> int:
         shutil.rmtree(temp_root, ignore_errors=True)
         die(f"unexpected server layout (no mods/deathmatch in {info['install_dir']})")
 
-    # The Linux server tarball ships an empty mods/deathmatch (no default
-    # acl.xml) and the server refuses to start without one; the Windows
-    # installer already places it. Provide the default ACL when missing.
-    acl_xml = mods / "acl.xml"
-    if not acl_xml.is_file():
-        template = SERVER_DIR / "templates" / "acl.xml"
-        if not template.is_file():
-            shutil.rmtree(temp_root, ignore_errors=True)
-            die(f"missing default ACL template: {template}")
-        shutil.copy2(template, acl_xml)
-        out("Installed default acl.xml (the Linux server ships an empty mods/deathmatch)")
+    ensure_default_acl(mods)
 
     # The x64 server loads modules from <server>/x64/modules (SERVER_BIN_PATH_MOD).
     modules_dir = server_root / "x64" / "modules"
@@ -497,9 +514,10 @@ def cmd_test(args) -> int:
         (resource_dir / "main.lua").write_text(script, encoding="utf-8")
     out(f"Test resources installed: {TEST_RESOURCE_NAME}, {WITNESS_RESOURCE_NAME}")
 
-    # Unique ports per run so parallel runs never collide. The Windows server
-    # reads the config from the SERVER ROOT (next to the exe); the Linux one
-    # from mods/deathmatch -- write both.
+    # Unique ports per run so parallel runs never collide. The server's config
+    # location is not fully reliable across builds (the Windows server has been
+    # seen reading it from the server root, the Linux one from mods/deathmatch),
+    # so write both -- the harness must not depend on which one a build reads.
     base = 23000 + (os.getpid() % 2000)
     conf_text = "\n".join(
         [
@@ -540,49 +558,95 @@ def cmd_test(args) -> int:
 class ServerProcess:
     """Platform-agnostic handle to a running MTA server.
 
-    Windows: the server shares the harness console. Output is read from the
-    console buffer (the full scrollback); commands are typed into the console
-    input buffer through Win32 key injection.
-    Linux: the headless server runs with piped stdin/stdout; the server is
-    launched under `stdbuf -oL` so its stdout is line-buffered (a plain pipe
-    would block-buffer it and markers would not arrive in real time). A reader
-    thread captures output from the stdout pipe.
+    The common interface (poll/wait/returncode) lives here; the platform-
+    specific console I/O is implemented by the subclasses so each platform's
+    behaviour is readable in one place:
+
+    - WindowsServerProcess: the server shares the harness console. Output is
+      read from the console buffer (the full scrollback); commands are typed
+      into the console input buffer through Win32 key injection.
+    - LinuxServerProcess: the headless server runs with piped stdin/stdout
+      under `stdbuf -oL` (line-buffered, so markers arrive in real time); a
+      reader thread captures output from the stdout pipe.
     """
 
     def __init__(self, process: "subprocess.Popen", platform: str) -> None:
         self.process = process
         self.platform = platform
-        self._lines: list[str] = []
-        self._reader: threading.Thread | None = None
-        if platform == "linux":
-            self._reader = threading.Thread(target=self._read_loop, daemon=True)
-            self._reader.start()
-
-    def _read_loop(self) -> None:
-        try:
-            for raw in self.process.stdout:
-                self._lines.append(raw.rstrip("\r\n"))
-        except Exception:
-            pass
 
     @property
     def returncode(self):
         return self.process.returncode
 
+    def poll(self):
+        return self.process.poll()
+
+    def wait(self, timeout: float):
+        return self.process.wait(timeout=timeout)
+
     def read_lines(self) -> list[str]:
         """Full output accumulated so far. Callers deduplicate by tail position."""
-        if self.platform == "windows":
-            return console_buffer_lines()
+        raise NotImplementedError
+
+    def send(self, text: str) -> None:
+        raise NotImplementedError
+
+    def kill(self) -> None:
+        raise NotImplementedError
+
+    @property
+    def reader_error(self) -> str | None:
+        """Set when the output reader thread failed; None while it is healthy."""
+        return None
+
+
+class WindowsServerProcess(ServerProcess):
+    """Windows: the server shares the harness console (buffer read + key injection)."""
+
+    def __init__(self, process: "subprocess.Popen") -> None:
+        super().__init__(process, "windows")
+
+    def read_lines(self) -> list[str]:
+        return console_buffer_lines()
+
+    def send(self, text: str) -> None:
+        # The console command needs its submit key: Enter (\r).
+        if not text.endswith("\r"):
+            text += "\r"
+        inject_console_text(text)
+
+    def kill(self) -> None:
+        subprocess.run(["taskkill", "/PID", str(self.process.pid), "/T", "/F"], capture_output=True)
+
+
+class LinuxServerProcess(ServerProcess):
+    """Linux: piped stdin/stdout under `stdbuf -oL`; a reader thread captures output."""
+
+    def __init__(self, process: "subprocess.Popen") -> None:
+        super().__init__(process, "linux")
+        self._lines: list[str] = []
+        self._reader_error: str | None = None
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+
+    def _read_loop(self) -> None:
+        # Surface a reader failure instead of hanging the run until the
+        # timeout: wait_for_results checks reader_error and fails fast.
+        try:
+            for raw in self.process.stdout:
+                self._lines.append(raw.rstrip("\r\n"))
+        except Exception as err:  # noqa: BLE001 - record, don't hang
+            self._reader_error = f"{type(err).__name__}: {err}"
+
+    @property
+    def reader_error(self) -> str | None:
+        return self._reader_error
+
+    def read_lines(self) -> list[str]:
         return list(self._lines)
 
     def send(self, text: str) -> None:
-        # The console command needs its submit key: Enter (\r) on the Windows
-        # console, a newline on the Linux stdin pipe.
-        if self.platform == "windows":
-            if not text.endswith("\r"):
-                text += "\r"
-            inject_console_text(text)
-            return
+        # The console command needs its submit key: a newline on the stdin pipe.
         if not text.endswith("\n"):
             text += "\n"
         try:
@@ -591,17 +655,8 @@ class ServerProcess:
         except (BrokenPipeError, OSError):
             pass
 
-    def poll(self):
-        return self.process.poll()
-
-    def wait(self, timeout: float):
-        return self.process.wait(timeout=timeout)
-
     def kill(self) -> None:
-        if self.platform == "windows":
-            subprocess.run(["taskkill", "/PID", str(self.process.pid), "/T", "/F"], capture_output=True)
-        else:
-            self.process.kill()
+        self.process.kill()
 
 
 def start_server(info: dict, server_root: Path) -> ServerProcess:
@@ -636,17 +691,17 @@ def start_server(info: dict, server_root: Path) -> ServerProcess:
         startupinfo.hStdOutput = stdout_handle
         startupinfo.hStdError = stdout_handle
         process = subprocess.Popen(
-            [info["server_exe"], "-t"],
+            [info["server_exe"], *server_args("windows")],
             cwd=str(server_root),
             startupinfo=startupinfo,
             close_fds=False,
         )
         kernel32.CloseHandle(stdin_handle)
         kernel32.CloseHandle(stdout_handle)
-        return ServerProcess(process, "windows")
+        return WindowsServerProcess(process)
 
     process = subprocess.Popen(
-        ["stdbuf", "-oL", "-eL", info["server_exe"]],
+        ["stdbuf", "-oL", "-eL", info["server_exe"], *server_args("linux")],
         cwd=str(server_root),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -654,7 +709,16 @@ def start_server(info: dict, server_root: Path) -> ServerProcess:
         text=True,
         bufsize=1,
     )
-    return ServerProcess(process, "linux")
+    return LinuxServerProcess(process)
+
+
+def server_args(platform: str) -> list[str]:
+    """Extra CLI args for the pinned server on a given platform.
+
+    The Windows server is started with `-t` (test mode); the Linux server
+    takes no extra flags. Kept in one place so the divergence is explicit.
+    """
+    return ["-t"] if platform == "windows" else []
 
 
 def run_server(info: dict, server_root: Path) -> RunResult:
@@ -809,12 +873,14 @@ def wait_for_results(server: ServerProcess) -> RunResult:
     phase = "gen1"  # gen1 -> stopping -> gen2 -> gen3 -> done
     stop_sent_at: float | None = None
     done_at: float | None = None
+    seen = 0  # how many lines of the accumulated output are already consumed
 
     while time.time() < deadline:
         # Consume only the lines appended since the last poll (the console
         # scrollback on Windows, the accumulated stdout on Linux).
         lines = server.read_lines()
-        for line in lines[len(result.tail):]:
+        for line in lines[seen:]:
+            seen += 1
             result.tail.append(line)
             for marker in NEGATIVE_MARKERS:
                 if marker in line and marker not in result.negative:
@@ -869,6 +935,16 @@ def wait_for_results(server: ServerProcess) -> RunResult:
             result.failed = True
             result.failure_reason = "the server exited before the integration run completed"
             out("The server exited before the integration result; console tail:")
+            dump_tail(result.tail)
+            return result
+
+        # A dead output reader would otherwise hang the run until the timeout
+        # with an empty tail; fail fast with the real cause instead.
+        reader_error = server.reader_error
+        if reader_error:
+            result.failed = True
+            result.failure_reason = f"output reader failed: {reader_error}"
+            out(f"The output reader failed ({reader_error}); console tail:")
             dump_tail(result.tail)
             return result
         time.sleep(0.2)
@@ -1008,8 +1084,10 @@ def stop_process(server: ServerProcess) -> tuple[bool, int | None]:
             server.wait(timeout=10)
         except subprocess.TimeoutExpired:
             pass
-    except Exception:
+    except (OSError, subprocess.TimeoutExpired):
         pass
+    except Exception as err:  # noqa: BLE001 - log, don't mask a stop-logic bug
+        out(f"stop_process: unexpected {type(err).__name__}: {err}")
     return graceful, server.returncode
 
 

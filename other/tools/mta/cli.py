@@ -177,22 +177,28 @@ def output_binary(root: Path, preset: str, config: dict) -> Path | None:
 
     The build writes the binary to build/<preset>/module/<platform>-<arch>/
     (the arch tag comes from cmake/core/platform.cmake). Rather than hard-code
-    an architecture, scan every arch subdirectory so the CLI works on any
-    target (x64, arm64, ...) the toolchain produces.
+    an architecture, scan the arch subdirectories so the CLI works on any
+    target (x64, arm64, ...) the toolchain produces. The extension follows the
+    platform tag in the directory name (win-* -> .dll), not the host OS, so
+    cross-compiles resolve correctly. More than one arch directory is
+    ambiguous and is rejected instead of silently picking one.
     """
     name = require_module_table(config)["name"]
-    system = py_platform.system()
-    ext = ".dll" if system == "Windows" else ".so"
     module_dir = root / "build" / preset / "module"
     if not module_dir.is_dir():
         return None
-    for arch_dir in module_dir.iterdir():
-        if not arch_dir.is_dir():
-            continue
-        candidate = arch_dir / (name + ext)
-        if candidate.is_file():
-            return candidate
-    return None
+    arch_dirs = sorted(d for d in module_dir.iterdir() if d.is_dir())
+    if not arch_dirs:
+        return None
+    if len(arch_dirs) > 1:
+        die(
+            f"ambiguous module output: multiple arch dirs under {module_dir}: "
+            f"{[d.name for d in arch_dirs]}; pass an explicit --preset"
+        )
+    arch_dir = arch_dirs[0]
+    ext = ".dll" if arch_dir.name.startswith("win") else ".so"
+    candidate = arch_dir / (name + ext)
+    return candidate if candidate.is_file() else None
 
 
 # --- mta init -------------------------------------------------------------------

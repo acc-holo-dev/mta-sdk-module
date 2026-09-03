@@ -48,6 +48,11 @@ jobs:
           python other/tools/mta/cli.py test unit
           python other/tools/mta/cli.py test lua
 
+      # Pure-function unit tests for the server harness and CLI helpers
+      # (stdlib unittest, no third-party deps).
+      - name: Python harness unit tests
+        run: python -m unittest discover -s other/tests/python
+
   linux-clang:
     name: Linux (Clang)
     runs-on: ubuntu-latest
@@ -212,8 +217,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y ninja-build g++
+      - name: Install build tools + MTA server runtime deps
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++ libncursesw6 zlib1g
 
       - name: Build the module
         run: python other/tools/mta/cli.py build --preset linux-gcc
